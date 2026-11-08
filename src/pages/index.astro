@@ -47,7 +47,8 @@ try {
 ---
 
 <Layout title="Catálogo Navideño | Importaciones Lima y Provincias">
-  <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100 shadow-sm">
+  <!-- Header con Buscador -->
+  <header class="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-xs">
     <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
       <span class="text-base md:text-xl font-bold tracking-tight text-red-700">🎄 MMP - NAVIDAD</span>
       
@@ -55,7 +56,7 @@ try {
         <input 
           type="text" 
           id="input-buscador" 
-          placeholder="🔍 Buscar producto o tag..." 
+          placeholder="🔍 Buscar por nombre o tag..." 
           class="w-full bg-gray-50 text-gray-800 text-xs md:text-sm px-4 py-2 rounded-full border border-gray-200 focus:outline-none focus:border-red-600 shadow-xs"
         />
       </div>
@@ -64,13 +65,14 @@ try {
         href={`https://wa.me/${numeroWhatsApp}?text=Hola,%20quisiera%20más%20información%20sobre%20el%20catálogo.`} 
         target="_blank" 
         rel="noopener noreferrer"
-        class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-medium px-4 py-2 rounded-full transition-colors shrink-0 shadow-sm"
+        class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-medium px-4 py-2 rounded-full transition-colors shrink-0 shadow-xs"
       >
         💬 WhatsApp
       </a>
     </div>
   </header>
 
+  <!-- Banner -->
   <section class="bg-gradient-to-r from-red-900 via-rose-950 to-emerald-950 text-white py-10 px-4 text-center">
     <div class="max-w-3xl mx-auto space-y-2">
       <span class="bg-red-500/30 text-red-200 text-xs font-semibold px-3 py-1 rounded-full border border-red-500/40">✨ Campaña Navideña 2026</span>
@@ -78,18 +80,43 @@ try {
     </div>
   </section>
 
+  <!-- Catálogo -->
   <main class="max-w-6xl mx-auto px-2 md:px-4 py-8">
-    <div class="flex items-center justify-between mb-6 px-2">
-      <h2 class="text-lg md:text-xl font-bold text-gray-900">Catálogo Disponible</h2>
-      <span class="text-xs md:text-sm text-gray-500" id="contador-productos">{productos.length} productos</span>
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 px-2">
+      <div>
+        <h2 class="text-lg md:text-xl font-bold text-gray-900">Catálogo Disponible</h2>
+        <span class="text-xs md:text-sm text-gray-500" id="contador-productos">{productos.length} productos en stock</span>
+      </div>
+
+      <!-- Filtros por categoría y badge -->
+      <div class="flex flex-wrap gap-2" id="filtros-container">
+        <button data-filtro="todos" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-red-700 text-white transition-colors cursor-pointer shadow-xs">Todos</button>
+        <button data-filtro="Juguetes" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">Juguetes</button>
+        <button data-filtro="Regalos" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">Regalos</button>
+        <button data-filtro="Ropa" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">Ropa</button>
+        <button data-filtro="Muebles" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">Muebles</button>
+        <button data-filtro="Carteras" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">Carteras</button>
+        <button data-filtro="Oferta" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-red-600 border border-red-200 hover:bg-red-50 transition-colors cursor-pointer">🔥 Ofertas</button>
+        <button data-filtro="Nuevo" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-red-600 border border-red-200 hover:bg-red-50 transition-colors cursor-pointer">✨ Nuevos</button>
+        <button data-filtro="Tendencia" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-red-600 border border-red-200 hover:bg-red-50 transition-colors cursor-pointer">⭐ Tendencia</button>
+      </div>
     </div>
 
     <!-- Grid de 3 columnas en celulares -->
     <div class="grid grid-cols-3 gap-2 sm:gap-4 md:gap-6" id="grid-productos">
-      {productos.map((item) => {
+      {productos.map((item, index) => {
         const precioNum = parseFloat(item.precio) || 0;
         const mensajeWp = encodeURIComponent(`Hola, me interesa "${item.nombre}" de S/ ${precioNum.toFixed(2)} visto en la web.`);
         const linkWp = `https://wa.me/${numeroWhatsApp}?text=${mensajeWp}`;
+        const descripcionSegura = item.descripcion || "Producto importado de alta calidad con garantía para Lima y provincias.";
+
+        // Validación estricta: Filtra URLs vacías, espacios o cadenas nulas en la galería
+        const fotosGaleria = item.galeria 
+          ? item.galeria.split(',').map(f => f.trim()).filter(f => f.length > 5 && f.startsWith('http')) 
+          : [];
+        
+        const todasLasFotos = [item.imagen, ...fotosGaleria];
+        const uniqueId = `prod-${index}`;
 
         return (
           <div 
@@ -97,29 +124,56 @@ try {
             data-nombre={item.nombre ? item.nombre.toLowerCase() : ''}
             data-tags={item.tags ? item.tags.toLowerCase() : ''}
             data-categoria={item.categoria ? item.categoria.toLowerCase() : ''}
+            data-badge={item.badge ? item.badge.toLowerCase() : ''}
           >
             <div>
-              <div class="relative bg-gray-50 aspect-square overflow-hidden flex items-center justify-center p-2">
-                <img 
-                  src={item.imagen} 
-                  alt={item.nombre} 
-                  class="object-contain w-full h-full"
-                  loading="lazy"
-                />
+              <div class="relative bg-gray-50 aspect-square overflow-hidden flex flex-col justify-between p-2">
+                <div class="w-full h-full absolute inset-0 bg-gray-50 flex items-center justify-center p-2">
+                  <img 
+                    src={item.imagen} 
+                    alt={item.nombre} 
+                    class="imagen-principal object-contain w-full h-full"
+                    id={`img-${uniqueId}`}
+                    loading="lazy"
+                  />
+                </div>
+
                 {item.badge && (
-                  <span class="absolute top-2 left-2 bg-red-600 text-white text-[9px] md:text-xs font-bold px-1.5 py-0.5 rounded shadow-xs">
+                  <span class="absolute top-2 left-2 z-10 bg-red-600 text-white text-[9px] md:text-xs font-bold px-1.5 py-0.5 rounded shadow-xs">
                     {item.badge}
                   </span>
+                )}
+
+                {/* Miniaturas de galería: Solo se renderiza si hay más de 1 foto real */}
+                {todasLasFotos.length > 1 && (
+                  <div class="relative z-10 mt-auto flex gap-1 bg-black/50 backdrop-blur-md p-1 rounded overflow-x-auto">
+                    {todasLasFotos.map((fotoUrl, fotoIdx) => (
+                      <button 
+                        type="button"
+                        class={`minifoto-btn w-6 h-6 rounded overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${fotoIdx === 0 ? 'border-red-500 scale-105' : 'border-white/50 hover:border-white'}`}
+                        data-target={`img-${uniqueId}`}
+                        data-url={fotoUrl}
+                      >
+                        <img src={fotoUrl} alt="" class="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
 
               <div class="p-2 md:p-3 flex flex-col space-y-1">
                 <span class="text-[9px] md:text-xs font-semibold text-red-600 uppercase tracking-wider">{item.categoria}</span>
                 <h3 class="text-xs md:text-sm font-semibold text-gray-900 line-clamp-2 leading-tight">{item.nombre}</h3>
+                
+                {item.medidas && (
+                  <p class="text-[9px] md:text-xs text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 inline-block">
+                    📏 {item.medidas}
+                  </p>
+                )}
               </div>
             </div>
 
-            <div class="p-2 md:p-3 pt-0 flex flex-col space-y-2">
+            <div class="p-2 md:p-3 pt-0 flex flex-col space-y-1.5">
               <div class="flex items-baseline justify-between border-t border-gray-50 pt-1.5">
                 <span class="text-xs md:text-base font-bold text-gray-900">S/ {precioNum.toFixed(2)}</span>
                 {item.precioAnterior && (
@@ -127,11 +181,23 @@ try {
                 )}
               </div>
 
+              <!-- Botón Ver Detalle -->
+              <button 
+                type="button"
+                class="btn-detalle w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium text-[9px] md:text-xs py-1.5 rounded-lg transition-colors text-center cursor-pointer"
+                data-nombre={item.nombre}
+                data-desc={descripcionSegura}
+                data-precio={`S/ ${precioNum.toFixed(2)}`}
+                data-imagen={item.imagen}
+              >
+                🔍 Ver detalle
+              </button>
+
               <a 
                 href={linkWp}
                 target="_blank"
                 rel="noopener noreferrer"
-                class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[10px] md:text-xs py-2 rounded-lg text-center transition-colors shadow-xs"
+                class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[9px] md:text-xs py-1.5 rounded-lg text-center transition-colors shadow-xs"
               >
                 Pedir WhatsApp
               </a>
@@ -142,36 +208,142 @@ try {
     </div>
   </main>
 
+  <!-- Modal Interactivo -->
+  <div id="modal-detalle" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
+      <button id="cerrar-modal-btn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
+      <img id="modal-img" src="" alt="" class="w-full h-48 object-contain rounded-xl bg-gray-50 p-2" />
+      <div>
+        <span id="modal-precio" class="text-emerald-600 font-bold text-lg"></span>
+        <h3 id="modal-titulo" class="text-xl font-bold text-gray-900 mt-1"></h3>
+      </div>
+      <p id="modal-desc" class="text-gray-600 text-sm leading-relaxed whitespace-pre-line"></p>
+      <div class="pt-2">
+        <button id="cerrar-modal-footer" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium text-sm py-2.5 rounded-xl transition-colors cursor-pointer">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <footer class="bg-slate-900 text-gray-300 mt-20 py-6 text-center text-xs">
     <p>🎄 MMP - Campaña Navideña 2026. Envíos a Lima y Provincias.</p>
   </footer>
 
   <script>
-    const inputBuscador = document.getElementById('input-buscador') as HTMLInputElement;
+    const botonesFiltro = document.querySelectorAll('.filtro-btn');
     const tarjetasProductos = document.querySelectorAll('.producto-card');
     const contadorProductos = document.getElementById('contador-productos');
+    const inputBuscador = document.getElementById('input-buscador') as HTMLInputElement;
+
+    let categoriaActiva = 'todos';
+    let textoBusqueda = '';
+
+    function aplicarFiltros() {
+      let visibles = 0;
+
+      tarjetasProductos.forEach(card => {
+        const categoriaCard = card.getAttribute('data-categoria') || '';
+        const badgeCard = card.getAttribute('data-badge') || '';
+        const nombreCard = card.getAttribute('data-nombre') || '';
+        const tagsCard = card.getAttribute('data-tags') || '';
+
+        const coincideCategoria = (
+          categoriaActiva === 'todos' || 
+          categoriaCard.includes(categoriaActiva.toLowerCase()) || 
+          badgeCard.includes(categoriaActiva.toLowerCase())
+        );
+
+        const coincideTexto = (
+          nombreCard.includes(textoBusqueda) || 
+          tagsCard.includes(textoBusqueda)
+        );
+
+        if (coincideCategoria && coincideTexto) {
+          (card as HTMLElement).style.display = 'flex';
+          visibles++;
+        } else {
+          (card as HTMLElement).style.display = 'none';
+        }
+      });
+
+      if (contadorProductos) {
+        contadorProductos.textContent = `${visibles} productos en stock`;
+      }
+    }
+
+    botonesFiltro.forEach(boton => {
+      boton.addEventListener('click', () => {
+        botonesFiltro.forEach(b => {
+          b.classList.remove('bg-red-700', 'text-white');
+          b.classList.add('bg-white', 'text-gray-700', 'border', 'border-gray-200');
+        });
+        boton.classList.remove('bg-white', 'text-gray-700', 'border', 'border-gray-200', 'text-red-600', 'border-red-200');
+        boton.classList.add('bg-red-700', 'text-white');
+
+        categoriaActiva = boton.getAttribute('data-filtro') || 'todos';
+        aplicarFiltros();
+      });
+    });
 
     if (inputBuscador) {
       inputBuscador.addEventListener('input', (e) => {
-        const texto = (e.target as HTMLInputElement).value.toLowerCase().trim();
-        let visibles = 0;
-
-        tarjetasProductos.forEach(card => {
-          const nombre = card.getAttribute('data-nombre') || '';
-          const tags = card.getAttribute('data-tags') || '';
-
-          if (nombre.includes(texto) || tags.includes(texto)) {
-            (card as HTMLElement).style.display = 'flex';
-            visibles++;
-          } else {
-            (card as HTMLElement).style.display = 'none';
-          }
-        });
-
-        if (contadorProductos) {
-          contadorProductos.textContent = `${visibles} productos`;
-        }
+        textoBusqueda = (e.target as HTMLInputElement).value.toLowerCase().trim();
+        aplicarFiltros();
       });
     }
+
+    // Galería interactiva
+    document.querySelectorAll('.minifoto-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const targetId = btn.getAttribute('data-target');
+        const nuevaUrl = btn.getAttribute('data-url');
+        
+        const imagenPrincipal = document.getElementById(targetId);
+        if (imagenPrincipal) {
+          imagenPrincipal.setAttribute('src', nuevaUrl);
+        }
+
+        const contenedorMini = btn.parentElement;
+        if (contenedorMini) {
+          contenedorMini.querySelectorAll('.minifoto-btn').forEach(b => {
+            b.classList.remove('border-red-500', 'scale-105');
+            b.classList.add('border-white/50');
+          });
+          btn.classList.add('border-red-500', 'scale-105');
+          btn.classList.remove('border-white/50');
+        }
+      });
+    });
+
+    // Modal de Detalles
+    const modalDetalle = document.getElementById('modal-detalle');
+    const modalTitulo = document.getElementById('modal-titulo');
+    const modalDesc = document.getElementById('modal-desc');
+    const modalPrecio = document.getElementById('modal-precio');
+    const modalImg = document.getElementById('modal-img') as HTMLImageElement;
+
+    document.querySelectorAll('.btn-detalle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (modalTitulo) modalTitulo.innerText = btn.getAttribute('data-nombre') || '';
+        if (modalDesc) modalDesc.innerText = btn.getAttribute('data-desc') || '';
+        if (modalPrecio) modalPrecio.innerText = btn.getAttribute('data-precio') || '';
+        if (modalImg) modalImg.src = btn.getAttribute('data-imagen') || '';
+
+        if (modalDetalle) {
+          modalDetalle.classList.remove('hidden');
+          modalDetalle.classList.add('flex');
+        }
+      });
+    });
+
+    function cerrarModalDetalle() {
+      if (modalDetalle) {
+        modalDetalle.classList.remove('flex');
+        modalDetalle.classList.add('hidden');
+      }
+    }
+
+    document.getElementById('cerrar-modal-btn')?.addEventListener('click', cerrarModalDetalle);
+    document.getElementById('cerrar-modal-footer')?.addEventListener('click', cerrarModalDetalle);
   </script>
 </Layout>
