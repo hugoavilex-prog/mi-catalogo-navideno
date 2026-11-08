@@ -128,7 +128,7 @@ try {
     </div>
 
     <!-- Cuadrícula de Productos -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6" id="grid-productos">
+    <div class="grid grid-cols-3 gap-2 sm:gap-4 md:gap-6" id="grid-productos">
       {productos.map((item) => {
         const precioNum = parseFloat(item.precio) || 0;
         const mensajeWp = encodeURIComponent(`Hola, me interesa el producto "${item.nombre}" (Medidas: ${item.medidas || 'N/D'}) con precio de S/ ${precioNum.toFixed(2)} visto en la web navideña. ¿Hay stock disponible?`);
