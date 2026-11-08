@@ -110,7 +110,6 @@ try {
         const linkWp = `https://wa.me/${numeroWhatsApp}?text=${mensajeWp}`;
         const descripcionSegura = item.descripcion || "Producto importado de alta calidad con garantía para Lima y provincias.";
 
-        // Galería múltiple limpia
         const fotosGaleria = item.galeria 
           ? item.galeria.split(',').map(f => f.trim()).filter(f => f.length > 5 && f.startsWith('http')) 
           : [];
@@ -206,7 +205,7 @@ try {
     </div>
   </main>
 
-  <!-- Modal Interactivo -->
+  <!-- Modal Interactivo Corregido -->
   <div id="modal-detalle" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
       <button id="cerrar-modal-btn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
@@ -250,7 +249,6 @@ try {
           badgeCard.includes(categoriaActiva.toLowerCase())
         );
 
-        // Búsqueda robusta por coincidencia de texto en nombre o tags separados por comas o espacios
         const coincideTexto = (
           nombreCard.includes(textoBusqueda) || 
           tagsCard.includes(textoBusqueda)
@@ -338,11 +336,18 @@ try {
     function cerrarModalDetalle() {
       if (modalDetalle) {
         modalDetalle.classList.remove('flex');
-        modalDetalle.classList.add('hidden`');
+        modalDetalle.classList.add('hidden');
       }
     }
 
     document.getElementById('cerrar-modal-btn')?.addEventListener('click', cerrarModalDetalle);
     document.getElementById('cerrar-modal-footer')?.addEventListener('click', cerrarModalDetalle);
+    
+    // Permitir cerrar haciendo clic fuera del cuadro blanco del modal
+    modalDetalle?.addEventListener('click', (e) => {
+      if (e.target === modalDetalle) {
+        cerrarModalDetalle();
+      }
+    });
   </script>
 </Layout>
