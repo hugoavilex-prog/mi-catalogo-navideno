@@ -1,0 +1,33 @@
+[
+ {
+    "id": 1,
+    "nombre": "Drone Pro Mini con Cámara 4K",
+    "categoria": "Juguetes",
+    "precio": 189.00,
+    "precioAnterior": 240.00,
+    "imagen": "https://images.unsplash.com/photo-1527977966376-1c8408f9f108?w=600&auto=format&fit=crop&q=80",
+    "badge": "Nuevo",
+    "medidas": "15cm x 12cm x 5cm",
+    "peso": "249g"
+  },
+  {
+    "id": 2,
+    "nombre": "Set de Luces LED RGB para Gaming",
+    "categoria": "Regalos",
+    "precio": 45.00,
+    "precioAnterior": 60.00,
+    "imagen": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600&auto=format&fit=crop&q=80",
+    "badge": "Oferta"
+  },
+ {
+    "id": 2,
+    "nombre": "Organizador Modular Multiususo",
+    "categoria": "Muebles",
+    "precio": 120.00,
+    "precioAnterior": 150.00,
+    "imagen": "https://images.unsplash.com/photo-1595428774223-ef52624120d2?w=600&auto=format&fit=crop&q=80",
+    "badge": "Tendencia",
+    "medidas": "80cm x 30cm x 120cm",
+    "material": "Madera Melamina 18mm"
+  }
+]
