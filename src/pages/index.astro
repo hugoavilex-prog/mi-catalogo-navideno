@@ -1,193 +1,125 @@
-<script>
-  const botonesFiltro = document.querySelectorAll('.filtro-btn');
-  const tarjetasProductos = document.querySelectorAll('.producto-card');
-  const contadorProductos = document.getElementById('contador-productos');
-  const inputBuscador = document.getElementById('input-buscador') as HTMLInputElement;
+---
+import Layout from '../layouts/Layout.astro';
 
-  let categoriaActiva = 'todos';
-  let textoBusqueda = '';
+// Tu nuevo enlace CSV público de Google Sheets
+const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS2ashxyFTq07uDvUqXXB7wYYtKFrVa_bsGbrvLg5sdRhbgEzzqo2z1kIZg8n_MTve4idf-fqRAfcz8/pub?output=csv";
 
-  // Función centralizada para filtrar productos (por categoría/badge Y por buscador)
-  function aplicarFiltros() {
-    let visibles = 0;
+const numeroWhatsApp = "51982441399";
 
-    tarjetasProductos.forEach(card => {
-      const categoriaCard = card.getAttribute('data-categoria') || '';
-      const badgeCard = card.getAttribute('data-badge') || '';
-      const nombreCard = card.getAttribute('data-nombre') || '';
-      const tagsCard = card.getAttribute('data-tags') || '';
+let productos = [];
 
-      // 1. Validar filtro de categoría o badge
-      const coincideCategoria = (
-        categoriaActiva === 'todos' || 
-        categoriaCard.toLowerCase() === categoriaActiva.toLowerCase() || 
-        badgeCard.toLowerCase() === categoriaActiva.toLowerCase()
-      );
-
-      // 2. Validar buscador de texto (busca en nombre o en tags)
-      const coincideTexto = (
-        nombreCard.includes(textoBusqueda) || 
-        tagsCard.includes(textoBusqueda)
-      );
-
-      if (coincideCategoria && coincideTexto) {
-        (card as HTMLElement).style.display = 'flex';
-        visibles++;
+try {
+  const response = await fetch(SHEET_CSV_URL);
+  const csvText = await response.text();
+  
+  const lineas = csvText.split('\n').filter(linea => linea.trim() !== '');
+  
+  const parseCSVLine = (linea) => {
+    const valores = [];
+    let enComillas = false;
+    let valorActual = '';
+    
+    for (let i = 0; i < linea.length; i++) {
+      const char = linea[i];
+      if (char === '"') {
+        enComillas = !enComillas;
+      } else if (char === ',' && !enComillas) {
+        valores.push(valorActual.trim().replace(/^"|"$/g, ''));
+        valorActual = '';
       } else {
-        (card as HTMLElement).style.display = 'none';
+        valorActual += char;
       }
-    });
-
-    if (contadorProductos) {
-      contadorProductos.textContent = `${visibles} productos en stock`;
     }
-  }
-
-  // Evento para los botones de categoría
-  botonesFiltro.forEach(boton => {
-    boton.addEventListener('click', () => {
-      botonesFiltro.forEach(b => {
-        b.classList.remove('bg-red-700', 'text-white');
-        b.classList.add('bg-white', 'text-gray-700', 'border', 'border-gray-200');
-      });
-      boton.classList.remove('bg-white', 'text-gray-700', 'border', 'border-gray-200', 'text-red-600', 'border-red-200');
-      boton.classList.add('bg-red-700', 'text-white');
-
-      categoriaActiva = boton.getAttribute('data-filtro') || 'todos';
-      aplicarFiltros();
-    });
-  });
-
-  // Evento para el buscador en tiempo real
-  if (inputBuscador) {
-    inputBuscador.addEventListener('input', (e) => {
-      textoBusqueda = (e.target as HTMLInputElement).value.toLowerCase().trim();
-      aplicarFiltros();
-    });
-  }
-
-  // Galería interactiva
-  document.querySelectorAll('.minifoto-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const targetId = btn.getAttribute('data-target');
-      const nuevaUrl = btn.getAttribute('data-url');
-      
-      const imagenPrincipal = document.getElementById(targetId);
-      if (imagenPrincipal) {
-        imagenPrincipal.setAttribute('src', nuevaUrl);
-      }
-
-      const contenedorMini = btn.parentElement;
-      if (contenedorMini) {
-        contenedorMini.querySelectorAll('.minifoto-btn').forEach(b => {
-          b.classList.remove('border-red-500', 'scale-105');
-          b.classList.add('border-white/50');
-        });
-        btn.classList.add('border-red-500', 'scale-105');
-        btn.classList.remove('border-white/50');
-      }
-    });
-  });
-
-  // Funciones del Modal de Detalles
-  (window as any).abrirModal = function(nombre: string, descripcion: string, precio: string, imagen: string) {
-    const tituloEl = document.getElementById('modal-titulo');
-    const descEl = document.getElementById('modal-desc');
-    const precioEl = document.getElementById('modal-precio');
-    const imgEl = document.getElementById('modal-img') as HTMLImageElement;
-    const modal = document.getElementById('modal-detalle');
-
-    if (tituloEl) tituloEl.innerText = nombre;
-    if (descEl) descEl.innerText = descripcion;
-    if (precioEl) precioEl.innerText = precio;
-    if (imgEl) imgEl.src = imagen;
-
-    if (modal) {
-      modal.classList.remove('hidden');
-      modal.classList.add('flex');
-    }
+    valores.push(valorActual.trim().replace(/^"|"$/g, ''));
+    return valores;
   };
 
-  (window as any).cerrarModal = function() {
-    const modal = document.getElementById('modal-detalle');
-    if (modal) {
-      modal.classList.remove('flex');
-      modal.classList.add('hidden');
-    }
-  };
-
-  // Zoom Modal Avanzado
-  const zoomModal = document.getElementById('zoom-modal');
-  const imagenZoomSrc = document.getElementById('imagen-zoom-src') as HTMLImageElement;
-  const btnZoomIn = document.getElementById('zoom-in');
-  const btnZoomOut = document.getElementById('zoom-out');
-  const btnZoomReset = document.getElementById('zoom-reset');
-  const cerrarZoom = document.getElementById('cerrar-zoom');
-
-  let escalaActual = 1;
-
-  function actualizarZoom() {
-    if (imagenZoomSrc) {
-      imagenZoomSrc.style.transform = `scale(${escalaActual})`;
-    }
-  }
-
-  document.querySelectorAll('img[data-zoomable="true"]').forEach(img => {
-    img.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const src = img.getAttribute('src');
-      if (src && zoomModal && imagenZoomSrc) {
-        imagenZoomSrc.src = src;
-        escalaActual = 1; 
-        actualizarZoom();
-        zoomModal.classList.remove('hidden');
-        zoomModal.classList.add('flex');
-      }
+  const cabeceras = parseCSVLine(lineas[0]);
+  
+  productos = lineas.slice(1).map(linea => {
+    const valores = parseCSVLine(linea);
+    const obj = {};
+    cabeceras.forEach((cabecera, i) => {
+      obj[cabecera] = valores[i] || '';
     });
+    return obj;
   });
 
-  if (btnZoomIn) {
-    btnZoomIn.addEventListener('click', () => {
-      if (escalaActual < 3) {
-        escalaActual += 0.3;
-        actualizarZoom();
-      }
-    });
-  }
+  // Filtramos para mostrar ÚNICAMENTE los productos que tengan estado "Activo"
+  productos = productos.filter(item => item.estado && item.estado.toLowerCase() === 'activo');
 
-  if (btnZoomOut) {
-    btnZoomOut.addEventListener('click', () => {
-      if (escalaActual > 1) {
-        escalaActual -= 0.3;
-        actualizarZoom();
-      }
-    });
-  }
+} catch (error) {
+  console.error("Error al cargar los productos de Google Sheets:", error);
+}
+---
 
-  if (btnZoomReset) {
-    btnZoomReset.addEventListener('click', () => {
-      escalaActual = 1;
-      actualizarZoom();
-    });
-  }
+<Layout title="Catálogo Navideño Exclusivo | Importaciones Lima y Provincias">
+  <!-- Header / Barra de Navegación con Buscador -->
+  <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-red-100 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
+      <div class="flex items-center space-x-2 shrink-0">
+        <span class="text-base md:text-xl font-bold tracking-tight text-red-700">🎄 MMP - NAVIDAD</span>
+      </div>
 
-  function cerrarModalZoom() {
-    if (zoomModal) {
-      zoomModal.classList.remove('flex');
-      zoomModal.classList.add('hidden');
-    }
-  }
+      <!-- Buscador en tiempo real -->
+      <div class="flex-1 max-w-md">
+        <input 
+          type="text" 
+          id="input-buscador" 
+          placeholder="🔍 Buscar por nombre o tag..." 
+          class="w-full bg-gray-50 text-gray-800 text-xs md:text-sm px-4 py-2 rounded-full border border-gray-200 focus:outline-none focus:border-red-600 shadow-xs transition-colors"
+        />
+      </div>
 
-  if (cerrarZoom) {
-    cerrarZoom.addEventListener('click', cerrarModalZoom);
-  }
+      <a 
+        href={`https://wa.me/${numeroWhatsApp}?text=Hola,%20quisiera%20más%20información%20sobre%20el%20catálogo%20navideño.`} 
+        target="_blank" 
+        rel="noopener noreferrer"
+        class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-medium px-3.5 py-2 rounded-full transition-colors flex items-center gap-1.5 shrink-0 shadow-sm"
+      >
+        💬 WhatsApp
+      </a>
+    </div>
+  </header>
 
-  if (zoomModal) {
-    zoomModal.addEventListener('click', (e) => {
-      if (e.target === zoomModal) {
-        cerrarModalZoom();
-      }
-    });
-  }
-</script>
+  <!-- Banner de Campaña -->
+  <section class="bg-gradient-to-r from-red-900 via-rose-950 to-emerald-950 text-white py-12 px-4 text-center relative overflow-hidden">
+    <div class="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]"></div>
+    <div class="max-w-3xl mx-auto space-y-3 relative z-10">
+      <span class="bg-red-500/30 text-red-200 text-xs font-semibold px-3 py-1 rounded-full border border-red-500/40">
+        ✨ Campaña Navideña 2026
+      </span>
+      <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight">
+        Regalos y Novedades Importadas para Esta Navidad
+      </h1>
+      <p class="text-gray-200 text-sm md:text-base">
+        Haz tus compras con anticipación. Envíos seguros a Lima y Provincias vía Shalom y Olva Courier. 🎁
+      </p>
+    </div>
+  </section>
+
+  <!-- Catálogo de Productos -->
+  <main class="max-w-6xl mx-auto px-4 py-10">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+      <div>
+        <h2 class="text-xl font-bold text-gray-900">Catálogo Disponible</h2>
+        <span class="text-sm text-gray-500" id="contador-productos">{productos.length} productos en stock</span>
+      </div>
+
+      <!-- Botones de Filtro (Categorías y Etiquetas de Badge combinados) -->
+      <div class="flex flex-wrap gap-2" id="filtros-container">
+        <button data-filtro="todos" class="filtro-btn px-4 py-2 text-xs font-semibold rounded-full bg-red-700 text-white transition-colors shadow-xs cursor-pointer">
+          Todos
+        </button>
+        <button data-filtro="Juguetes" class="filtro-btn px-4 py-2 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">
+          Juguetes
+        </button>
+        <button data-filtro="Regalos" class="filtro-btn px-4 py-2 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">
+          Regalos
+        </button>
+        <button data-filtro="Ropa" class="filtro-btn px-4 py-2 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">
+          Ropa
+        </button>
+        <button data-filtro="Muebles" class="filtro-btn px-4 py-2 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">
+          Muebles
+        </button>
