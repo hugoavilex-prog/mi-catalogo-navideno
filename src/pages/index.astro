@@ -127,7 +127,7 @@ try {
       </div>
     </div>
 
-    <!-- Cuadrícula de Productos -->
+    <!-- Cuadrícula de Productos (3 columnas en celulares) -->
     <div class="grid grid-cols-3 gap-2 sm:gap-4 md:gap-6" id="grid-productos">
       {productos.map((item) => {
         const precioNum = parseFloat(item.precio) || 0;
@@ -136,77 +136,88 @@ try {
 
         const fotosGaleria = item.galeria ? item.galeria.split(',').map(f => f.trim()).filter(Boolean) : [];
         const todasLasFotos = [item.imagen, ...fotosGaleria];
+        const descripcionSegura = item.descripcion || "Producto importado de alta calidad con garantía para Lima y provincias.";
 
         return (
           <div 
-            class="producto-card bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col"
+            class="producto-card bg-white rounded-xl md:rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col justify-between"
             data-categoria={item.categoria}
             data-badge={item.badge}
           >
             <!-- Imagen Principal y Galería -->
-            <div class="relative bg-gray-50 aspect-square overflow-hidden flex flex-col justify-between p-3">
-              <div class="w-full h-full absolute inset-0 bg-gray-50 flex items-center justify-center p-4">
-                <img 
-                  src={item.imagen} 
-                  alt={item.nombre} 
-                  class="imagen-principal object-contain w-full h-full cursor-zoom-in transition-all duration-300"
-                  id={`img-principal-${item.id}`}
-                  data-zoomable="true"
-                  loading="lazy"
-                />
-              </div>
-
-              {item.badge && (
-                <span class="absolute top-3 left-3 z-10 bg-red-600 text-white text-xs font-bold px-2.5 py-1 rounded-md shadow-xs">
-                  {item.badge}
-                </span>
-              )}
-
-              {todasLasFotos.length > 1 && (
-                <div class="relative z-10 mt-auto flex gap-1.5 bg-black/50 backdrop-blur-md p-1.5 rounded-lg overflow-x-auto">
-                  {todasLasFotos.map((fotoUrl, index) => (
-                    <button 
-                      type="button"
-                      class={`minifoto-btn w-9 h-9 rounded-md overflow-hidden border-2 transition-all shrink-0 focus:outline-hidden cursor-pointer ${index === 0 ? 'border-red-500 scale-105' : 'border-white/50 hover:border-white'}`}
-                      data-target={`img-principal-${item.id}`}
-                      data-url={fotoUrl}
-                    >
-                      <img src={fotoUrl} alt="" class="w-full h-full object-cover" />
-                    </button>
-                  ))}
+            <div>
+              <div class="relative bg-gray-50 aspect-square overflow-hidden flex flex-col justify-between p-2 md:p-3">
+                <div class="w-full h-full absolute inset-0 bg-gray-50 flex items-center justify-center p-2 md:p-4">
+                  <img 
+                    src={item.imagen} 
+                    alt={item.nombre} 
+                    class="imagen-principal object-contain w-full h-full cursor-zoom-in transition-all duration-300"
+                    id={`img-principal-${item.id}`}
+                    data-zoomable="true"
+                    loading="lazy"
+                  />
                 </div>
-              )}
-            </div>
 
-            <!-- Contenido de la Card -->
-            <div class="p-5 flex flex-col flex-grow justify-between space-y-4">
-              <div class="mt-2 space-y-1">
-                <span class="text-xs font-semibold text-red-600 uppercase tracking-wider">{item.categoria}</span>
-                <h3 class="text-base font-semibold text-gray-900 line-clamp-2">{item.nombre}</h3>
-                
-                {item.medidas && (
-                  <p class="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded-md inline-block border border-gray-100">
-                    📏 Medidas: <span class="font-medium text-gray-700">{item.medidas}</span>
-                  </p>
+                {item.badge && (
+                  <span class="absolute top-2 left-2 md:top-3 md:left-3 z-10 bg-red-600 text-white text-[10px] md:text-xs font-bold px-2 py-0.5 md:px-2.5 md:py-1 rounded-md shadow-xs">
+                    {item.badge}
+                  </span>
+                )}
+
+                {todasLasFotos.length > 1 && (
+                  <div class="relative z-10 mt-auto flex gap-1 bg-black/50 backdrop-blur-md p-1 rounded-lg overflow-x-auto">
+                    {todasLasFotos.map((fotoUrl, index) => (
+                      <button 
+                        type="button"
+                        class={`minifoto-btn w-7 h-7 md:w-9 md:h-9 rounded-md overflow-hidden border-2 transition-all shrink-0 focus:outline-hidden cursor-pointer ${index === 0 ? 'border-red-500 scale-105' : 'border-white/50 hover:border-white'}`}
+                        data-target={`img-principal-${item.id}`}
+                        data-url={fotoUrl}
+                      >
+                        <img src={fotoUrl} alt="" class="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
 
-              <div class="flex items-baseline justify-between pt-2 border-t border-gray-50">
-                <div>
-                  <span class="text-lg font-bold text-gray-900">S/ {precioNum.toFixed(2)}</span>
-                  {item.precioAnterior && (
-                    <span class="text-xs text-gray-400 line-through ml-2">S/ {parseFloat(item.precioAnterior).toFixed(2)}</span>
-                  )}
-                </div>
+              <!-- Contenido de la Card -->
+              <div class="p-2 md:p-4 flex flex-col space-y-1.5">
+                <span class="text-[10px] md:text-xs font-semibold text-red-600 uppercase tracking-wider">{item.categoria}</span>
+                <h3 class="text-xs md:text-base font-semibold text-gray-900 line-clamp-2 leading-tight">{item.nombre}</h3>
+                
+                {item.medidas && (
+                  <p class="text-[10px] md:text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded-md inline-block border border-gray-100">
+                    📏 <span class="font-medium text-gray-700">{item.medidas}</span>
+                  </p>
+                )}
               </div>
+            </div>
+
+            <!-- Precios, Botón Ver Detalle y WhatsApp -->
+            <div class="p-2 md:p-4 pt-0 flex flex-col space-y-2">
+              <div class="flex flex-col md:flex-row items-start md:items-baseline justify-between border-t border-gray-50 pt-2">
+                <span class="text-sm md:text-lg font-bold text-gray-900">S/ {precioNum.toFixed(2)}</span>
+                {item.precioAnterior && (
+                  <span class="text-[10px] md:text-xs text-gray-400 line-through">S/ {parseFloat(item.precioAnterior).toFixed(2)}</span>
+                )}
+              </div>
+
+              <!-- Botón Ver Detalle -->
+              <button 
+                type="button"
+                onclick={`abrirModal(${JSON.stringify(item.nombre)}, ${JSON.stringify(descripcionSegura)}, 'S/ ${precioNum.toFixed(2)}', ${JSON.stringify(item.imagen)})`}
+                class="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium text-[10px] md:text-xs py-1.5 md:py-2 rounded-lg md:rounded-xl transition-colors text-center cursor-pointer"
+              >
+                🔍 Ver detalle
+              </button>
 
               <a 
                 href={linkWp}
                 target="_blank"
                 rel="noopener noreferrer"
-                class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm py-2.5 rounded-xl text-center transition-colors flex items-center justify-center gap-2 shadow-sm"
+                class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[10px] md:text-sm py-1.5 md:py-2.5 rounded-lg md:rounded-xl text-center transition-colors flex items-center justify-center gap-1 shadow-sm"
               >
-                Pedir por WhatsApp
+                Pedir WhatsApp
               </a>
             </div>
           </div>
@@ -215,9 +226,28 @@ try {
     </div>
   </main>
 
+  <!-- Modal Interactivo de Ver Detalle -->
+  <div id="modal-detalle" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
+      <button onclick="cerrarModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">
+        ✕
+      </button>
+      <img id="modal-img" src="" alt="" class="w-full h-48 object-contain rounded-xl bg-gray-50 p-2" />
+      <div>
+        <span id="modal-precio" class="text-emerald-600 font-bold text-lg"></span>
+        <h3 id="modal-titulo" class="text-xl font-bold text-gray-900 mt-1"></h3>
+      </div>
+      <p id="modal-desc" class="text-gray-600 text-sm leading-relaxed whitespace-pre-line"></p>
+      <div class="pt-2">
+        <button onclick="cerrarModal()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium text-sm py-2.5 rounded-xl transition-colors cursor-pointer">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Interactivo con Botones de Zoom (+ y -) -->
   <div id="zoom-modal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden flex-col items-center justify-center p-4">
-    <!-- Barra de Controles de Zoom -->
     <div class="absolute top-4 flex items-center gap-3 bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 shadow-lg z-50">
       <button id="zoom-in" class="text-white font-bold px-3 py-1 bg-white/20 hover:bg-white/40 rounded-full transition-colors text-lg cursor-pointer" title="Acercar">+</button>
       <button id="zoom-out" class="text-white font-bold px-3 py-1 bg-white/20 hover:bg-white/40 rounded-full transition-colors text-lg cursor-pointer" title="Alejar">-</button>
@@ -225,7 +255,6 @@ try {
       <button id="cerrar-zoom" class="text-white text-lg font-bold bg-white/20 hover:bg-red-600 w-8 h-8 rounded-full flex items-center justify-center transition-colors ml-2 cursor-pointer" title="Cerrar">✕</button>
     </div>
 
-    <!-- Contenedor de la Imagen con Zoom Dinámico -->
     <div class="relative w-full h-full flex items-center justify-center overflow-hidden">
       <img id="imagen-zoom-src" src="" alt="Zoom producto" class="max-h-[85vh] max-w-[85vw] object-contain rounded-lg shadow-2xl transition-transform duration-200 select-none cursor-grab active:cursor-grabbing" style="transform: scale(1);" />
     </div>
@@ -240,7 +269,7 @@ try {
     </div>
   </footer>
 
-  <!-- Script para filtros, galería interactiva y zoom con controles de acercar/alejar -->
+  <!-- Script para filtros, galería interactiva, zoom y modal de detalles -->
   <script>
     const botonesFiltro = document.querySelectorAll('.filtro-btn');
     const tarjetasProductos = document.querySelectorAll('.producto-card');
@@ -267,10 +296,10 @@ try {
             categoriaCard === filtroSeleccionado || 
             badgeCard === filtroSeleccionado
           ) {
-            card.style.display = 'flex';
+            (card as HTMLElement).style.display = 'flex';
             visibles++;
           } else {
-            card.style.display = 'none';
+            (card as HTMLElement).style.display = 'none';
           }
         });
 
@@ -304,6 +333,33 @@ try {
       });
     });
 
+    // Funciones del Modal de Detalles
+    (window as any).abrirModal = function(nombre: string, descripcion: string, precio: string, imagen: string) {
+      const tituloEl = document.getElementById('modal-titulo');
+      const descEl = document.getElementById('modal-desc');
+      const precioEl = document.getElementById('modal-precio');
+      const imgEl = document.getElementById('modal-img') as HTMLImageElement;
+      const modal = document.getElementById('modal-detalle');
+
+      if (tituloEl) tituloEl.innerText = nombre;
+      if (descEl) descEl.innerText = descripcion;
+      if (precioEl) precioEl.innerText = precio;
+      if (imgEl) imgEl.src = imagen;
+
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+    };
+
+    (window as any).cerrarModal = function() {
+      const modal = document.getElementById('modal-detalle');
+      if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+      }
+    };
+
     // Zoom Modal Avanzado con Botones de Acercar / Alejar
     const zoomModal = document.getElementById('zoom-modal');
     const imagenZoomSrc = document.getElementById('imagen-zoom-src') as HTMLImageElement;
@@ -326,7 +382,7 @@ try {
         const src = img.getAttribute('src');
         if (src && zoomModal && imagenZoomSrc) {
           imagenZoomSrc.src = src;
-          escalaActual = 1; // Reiniciar zoom al abrir
+          escalaActual = 1; 
           actualizarZoom();
           zoomModal.classList.remove('hidden');
           zoomModal.classList.add('flex');
@@ -336,7 +392,7 @@ try {
 
     if (btnZoomIn) {
       btnZoomIn.addEventListener('click', () => {
-        if (escalaActual < 3) { // Límite máximo de acercamiento
+        if (escalaActual < 3) {
           escalaActual += 0.3;
           actualizarZoom();
         }
@@ -345,7 +401,7 @@ try {
 
     if (btnZoomOut) {
       btnZoomOut.addEventListener('click', () => {
-        if (escalaActual > 1) { // Límite mínimo (escala normal)
+        if (escalaActual > 1) {
           escalaActual -= 0.3;
           actualizarZoom();
         }
@@ -372,7 +428,6 @@ try {
 
     if (zoomModal) {
       zoomModal.addEventListener('click', (e) => {
-        // Cierra si hacen clic fuera de la imagen (en el fondo oscuro)
         if (e.target === zoomModal) {
           cerrarModalZoom();
         }
