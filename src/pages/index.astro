@@ -35,7 +35,7 @@ try {
     const valores = parseCSVLine(linea);
     const obj = {};
     cabeceras.forEach((cabecera, i) => {
-      obj[cabecera] = valores[i] || '';
+      obj[cabecera.trim()] = valores[i] ? valores[i].trim() : '';
     });
     return obj;
   });
@@ -56,7 +56,7 @@ try {
         <input 
           type="text" 
           id="input-buscador" 
-          placeholder="🔍 Buscar por nombre o tag..." 
+          placeholder="🔍 Buscar por nombre o tag (ej: drone, luces)..." 
           class="w-full bg-gray-50 text-gray-800 text-xs md:text-sm px-4 py-2 rounded-full border border-gray-200 focus:outline-none focus:border-red-600 shadow-xs"
         />
       </div>
@@ -110,7 +110,7 @@ try {
         const linkWp = `https://wa.me/${numeroWhatsApp}?text=${mensajeWp}`;
         const descripcionSegura = item.descripcion || "Producto importado de alta calidad con garantía para Lima y provincias.";
 
-        // Validación estricta: Filtra URLs vacías, espacios o cadenas nulas en la galería
+        // Galería múltiple limpia
         const fotosGaleria = item.galeria 
           ? item.galeria.split(',').map(f => f.trim()).filter(f => f.length > 5 && f.startsWith('http')) 
           : [];
@@ -144,7 +144,6 @@ try {
                   </span>
                 )}
 
-                {/* Miniaturas de galería: Solo se renderiza si hay más de 1 foto real */}
                 {todasLasFotos.length > 1 && (
                   <div class="relative z-10 mt-auto flex gap-1 bg-black/50 backdrop-blur-md p-1 rounded overflow-x-auto">
                     {todasLasFotos.map((fotoUrl, fotoIdx) => (
@@ -181,7 +180,6 @@ try {
                 )}
               </div>
 
-              <!-- Botón Ver Detalle -->
               <button 
                 type="button"
                 class="btn-detalle w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium text-[9px] md:text-xs py-1.5 rounded-lg transition-colors text-center cursor-pointer"
@@ -252,6 +250,7 @@ try {
           badgeCard.includes(categoriaActiva.toLowerCase())
         );
 
+        // Búsqueda robusta por coincidencia de texto en nombre o tags separados por comas o espacios
         const coincideTexto = (
           nombreCard.includes(textoBusqueda) || 
           tagsCard.includes(textoBusqueda)
@@ -339,7 +338,7 @@ try {
     function cerrarModalDetalle() {
       if (modalDetalle) {
         modalDetalle.classList.remove('flex');
-        modalDetalle.classList.add('hidden');
+        modalDetalle.classList.add('hidden`');
       }
     }
 
