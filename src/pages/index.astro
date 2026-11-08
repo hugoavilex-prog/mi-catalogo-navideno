@@ -1,9 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 
-// Tu nuevo enlace CSV público de Google Sheets
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS2ashxyFTq07uDvUqXXB7wYYtKFrVa_bsGbrvLg5sdRhbgEzzqo2z1kIZg8n_MTve4idf-fqRAfcz8/pub?output=csv";
-
 const numeroWhatsApp = "51982441399";
 
 let productos = [];
@@ -11,14 +9,12 @@ let productos = [];
 try {
   const response = await fetch(SHEET_CSV_URL);
   const csvText = await response.text();
-  
   const lineas = csvText.split('\n').filter(linea => linea.trim() !== '');
   
   const parseCSVLine = (linea) => {
     const valores = [];
     let enComillas = false;
     let valorActual = '';
-    
     for (let i = 0; i < linea.length; i++) {
       const char = linea[i];
       if (char === '"') {
@@ -35,7 +31,6 @@ try {
   };
 
   const cabeceras = parseCSVLine(lineas[0]);
-  
   productos = lineas.slice(1).map(linea => {
     const valores = parseCSVLine(linea);
     const obj = {};
@@ -45,81 +40,138 @@ try {
     return obj;
   });
 
-  // Filtramos para mostrar ÚNICAMENTE los productos que tengan estado "Activo"
   productos = productos.filter(item => item.estado && item.estado.toLowerCase() === 'activo');
-
 } catch (error) {
-  console.error("Error al cargar los productos de Google Sheets:", error);
+  console.error("Error al cargar Google Sheets:", error);
 }
 ---
 
-<Layout title="Catálogo Navideño Exclusivo | Importaciones Lima y Provincias">
-  <!-- Header / Barra de Navegación con Buscador -->
-  <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-red-100 shadow-sm">
+<Layout title="Catálogo Navideño | Importaciones Lima y Provincias">
+  <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100 shadow-sm">
     <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
-      <div class="flex items-center space-x-2 shrink-0">
-        <span class="text-base md:text-xl font-bold tracking-tight text-red-700">🎄 MMP - NAVIDAD</span>
-      </div>
-
-      <!-- Buscador en tiempo real -->
+      <span class="text-base md:text-xl font-bold tracking-tight text-red-700">🎄 MMP - NAVIDAD</span>
+      
       <div class="flex-1 max-w-md">
         <input 
           type="text" 
           id="input-buscador" 
-          placeholder="🔍 Buscar por nombre o tag..." 
-          class="w-full bg-gray-50 text-gray-800 text-xs md:text-sm px-4 py-2 rounded-full border border-gray-200 focus:outline-none focus:border-red-600 shadow-xs transition-colors"
+          placeholder="🔍 Buscar producto o tag..." 
+          class="w-full bg-gray-50 text-gray-800 text-xs md:text-sm px-4 py-2 rounded-full border border-gray-200 focus:outline-none focus:border-red-600 shadow-xs"
         />
       </div>
 
       <a 
-        href={`https://wa.me/${numeroWhatsApp}?text=Hola,%20quisiera%20más%20información%20sobre%20el%20catálogo%20navideño.`} 
+        href={`https://wa.me/${numeroWhatsApp}?text=Hola,%20quisiera%20más%20información%20sobre%20el%20catálogo.`} 
         target="_blank" 
         rel="noopener noreferrer"
-        class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-medium px-3.5 py-2 rounded-full transition-colors flex items-center gap-1.5 shrink-0 shadow-sm"
+        class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-medium px-4 py-2 rounded-full transition-colors shrink-0 shadow-sm"
       >
         💬 WhatsApp
       </a>
     </div>
   </header>
 
-  <!-- Banner de Campaña -->
-  <section class="bg-gradient-to-r from-red-900 via-rose-950 to-emerald-950 text-white py-12 px-4 text-center relative overflow-hidden">
-    <div class="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]"></div>
-    <div class="max-w-3xl mx-auto space-y-3 relative z-10">
-      <span class="bg-red-500/30 text-red-200 text-xs font-semibold px-3 py-1 rounded-full border border-red-500/40">
-        ✨ Campaña Navideña 2026
-      </span>
-      <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight">
-        Regalos y Novedades Importadas para Esta Navidad
-      </h1>
-      <p class="text-gray-200 text-sm md:text-base">
-        Haz tus compras con anticipación. Envíos seguros a Lima y Provincias vía Shalom y Olva Courier. 🎁
-      </p>
+  <section class="bg-gradient-to-r from-red-900 via-rose-950 to-emerald-950 text-white py-10 px-4 text-center">
+    <div class="max-w-3xl mx-auto space-y-2">
+      <span class="bg-red-500/30 text-red-200 text-xs font-semibold px-3 py-1 rounded-full border border-red-500/40">✨ Campaña Navideña 2026</span>
+      <h1 class="text-2xl md:text-4xl font-extrabold tracking-tight">Regalos y Novedades con Envío a Todo el Perú</h1>
     </div>
   </section>
 
-  <!-- Catálogo de Productos -->
-  <main class="max-w-6xl mx-auto px-4 py-10">
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-      <div>
-        <h2 class="text-xl font-bold text-gray-900">Catálogo Disponible</h2>
-        <span class="text-sm text-gray-500" id="contador-productos">{productos.length} productos en stock</span>
-      </div>
+  <main class="max-w-6xl mx-auto px-2 md:px-4 py-8">
+    <div class="flex items-center justify-between mb-6 px-2">
+      <h2 class="text-lg md:text-xl font-bold text-gray-900">Catálogo Disponible</h2>
+      <span class="text-xs md:text-sm text-gray-500" id="contador-productos">{productos.length} productos</span>
+    </div>
 
-      <!-- Botones de Filtro (Categorías y Etiquetas de Badge combinados) -->
-      <div class="flex flex-wrap gap-2" id="filtros-container">
-        <button data-filtro="todos" class="filtro-btn px-4 py-2 text-xs font-semibold rounded-full bg-red-700 text-white transition-colors shadow-xs cursor-pointer">
-          Todos
-        </button>
-        <button data-filtro="Juguetes" class="filtro-btn px-4 py-2 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">
-          Juguetes
-        </button>
-        <button data-filtro="Regalos" class="filtro-btn px-4 py-2 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">
-          Regalos
-        </button>
-        <button data-filtro="Ropa" class="filtro-btn px-4 py-2 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">
-          Ropa
-        </button>
-        <button data-filtro="Muebles" class="filtro-btn px-4 py-2 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">
-          Muebles
-        </button>
+    <!-- Grid de 3 columnas en celulares -->
+    <div class="grid grid-cols-3 gap-2 sm:gap-4 md:gap-6" id="grid-productos">
+      {productos.map((item) => {
+        const precioNum = parseFloat(item.precio) || 0;
+        const mensajeWp = encodeURIComponent(`Hola, me interesa "${item.nombre}" de S/ ${precioNum.toFixed(2)} visto en la web.`);
+        const linkWp = `https://wa.me/${numeroWhatsApp}?text=${mensajeWp}`;
+
+        return (
+          <div 
+            class="producto-card bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col justify-between"
+            data-nombre={item.nombre ? item.nombre.toLowerCase() : ''}
+            data-tags={item.tags ? item.tags.toLowerCase() : ''}
+            data-categoria={item.categoria ? item.categoria.toLowerCase() : ''}
+          >
+            <div>
+              <div class="relative bg-gray-50 aspect-square overflow-hidden flex items-center justify-center p-2">
+                <img 
+                  src={item.imagen} 
+                  alt={item.nombre} 
+                  class="object-contain w-full h-full"
+                  loading="lazy"
+                />
+                {item.badge && (
+                  <span class="absolute top-2 left-2 bg-red-600 text-white text-[9px] md:text-xs font-bold px-1.5 py-0.5 rounded shadow-xs">
+                    {item.badge}
+                  </span>
+                )}
+              </div>
+
+              <div class="p-2 md:p-3 flex flex-col space-y-1">
+                <span class="text-[9px] md:text-xs font-semibold text-red-600 uppercase tracking-wider">{item.categoria}</span>
+                <h3 class="text-xs md:text-sm font-semibold text-gray-900 line-clamp-2 leading-tight">{item.nombre}</h3>
+              </div>
+            </div>
+
+            <div class="p-2 md:p-3 pt-0 flex flex-col space-y-2">
+              <div class="flex items-baseline justify-between border-t border-gray-50 pt-1.5">
+                <span class="text-xs md:text-base font-bold text-gray-900">S/ {precioNum.toFixed(2)}</span>
+                {item.precioAnterior && (
+                  <span class="text-[9px] md:text-xs text-gray-400 line-through">S/ {parseFloat(item.precioAnterior).toFixed(2)}</span>
+                )}
+              </div>
+
+              <a 
+                href={linkWp}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[10px] md:text-xs py-2 rounded-lg text-center transition-colors shadow-xs"
+              >
+                Pedir WhatsApp
+              </a>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </main>
+
+  <footer class="bg-slate-900 text-gray-300 mt-20 py-6 text-center text-xs">
+    <p>🎄 MMP - Campaña Navideña 2026. Envíos a Lima y Provincias.</p>
+  </footer>
+
+  <script>
+    const inputBuscador = document.getElementById('input-buscador') as HTMLInputElement;
+    const tarjetasProductos = document.querySelectorAll('.producto-card');
+    const contadorProductos = document.getElementById('contador-productos');
+
+    if (inputBuscador) {
+      inputBuscador.addEventListener('input', (e) => {
+        const texto = (e.target as HTMLInputElement).value.toLowerCase().trim();
+        let visibles = 0;
+
+        tarjetasProductos.forEach(card => {
+          const nombre = card.getAttribute('data-nombre') || '';
+          const tags = card.getAttribute('data-tags') || '';
+
+          if (nombre.includes(texto) || tags.includes(texto)) {
+            (card as HTMLElement).style.display = 'flex';
+            visibles++;
+          } else {
+            (card as HTMLElement).style.display = 'none';
+          }
+        });
+
+        if (contadorProductos) {
+          contadorProductos.textContent = `${visibles} productos`;
+        }
+      });
+    }
+  </script>
+</Layout>
