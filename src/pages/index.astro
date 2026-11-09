@@ -65,18 +65,63 @@ try {
         href={`https://wa.me/${numeroWhatsApp}?text=Hola,%20quisiera%20más%20información%20sobre%20el%20catálogo.`} 
         target="_blank" 
         rel="noopener noreferrer"
-        class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-medium px-4 py-2 rounded-full transition-colors shrink-0 shadow-xs"
+        class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-medium px-4 py-2 rounded-full transition-colors shrink-0 shadow-xs flex items-center gap-1.5"
       >
         💬 WhatsApp
       </a>
     </div>
   </header>
 
-  <!-- Banner -->
-  <section class="bg-gradient-to-r from-red-900 via-rose-950 to-emerald-950 text-white py-10 px-4 text-center">
-    <div class="max-w-3xl mx-auto space-y-2">
+  <!-- Banner de Campaña y 3. Contador Regresivo -->
+  <section class="bg-gradient-to-r from-red-900 via-rose-950 to-emerald-950 text-white py-10 px-4 text-center relative overflow-hidden">
+    <div class="max-w-3xl mx-auto space-y-3 relative z-10">
       <span class="bg-red-500/30 text-red-200 text-xs font-semibold px-3 py-1 rounded-full border border-red-500/40">✨ Campaña Navideña 2026</span>
       <h1 class="text-2xl md:text-4xl font-extrabold tracking-tight">Regalos y Novedades con Envío a Todo el Perú</h1>
+      <p class="text-gray-200 text-xs md:text-sm">Asegura tus regalos con anticipación al mejor precio del mercado.</p>
+      
+      <!-- Contador Regresivo en Vivo -->
+      <div id="contador-navidad" class="pt-2 flex justify-center items-center gap-2 text-xs md:text-sm font-semibold text-amber-300">
+        <span>⏳ Faltan <span id="dias" class="font-bold text-white">--</span> días, <span id="horas" class="font-bold text-white">--</span>h <span id="minutos" class="font-bold text-white">--</span>m <span id="segundos" class="font-bold text-white">--</span>s para Navidad</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Sello o Barra de Confianza y Garantía -->
+  <section class="bg-slate-900 text-gray-200 py-3 px-4 border-b border-red-900/30 text-xs">
+    <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-2 text-center md:text-left">
+      <div class="flex items-center justify-center md:justify-start gap-2">
+        <span class="text-base">🛡️</span>
+        <span><strong>Compra 100% Segura</strong> y Garantizada</span>
+      </div>
+      <div class="flex items-center justify-center gap-2">
+        <span class="text-base">📱</span>
+        <span>Pagos vía <strong>Yape, Plin y BCP / Interbank</strong></span>
+      </div>
+      <div class="flex items-center justify-center md:justify-end gap-2">
+        <span class="text-base">⏰</span>
+        <span>Atención Lunes a Sábado (9am - 8pm)</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 1. Sección de Métodos de Envío y Tiempos de Entrega -->
+  <section class="bg-red-50/60 border-b border-red-100 py-4 px-4 text-xs text-gray-700">
+    <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">📦</span>
+        <div>
+          <p class="font-bold text-gray-900">Envíos Rápidos y Seguros a Nivel Nacional</p>
+          <p class="text-gray-600"><strong>Lima Metropolitana:</strong> Despachos en 24-48 horas. | <strong>Provincias:</strong> Envíos diarios vía Shalom, Olva Courier y Marvisur.</p>
+        </div>
+      </div>
+      <a 
+        href={`https://wa.me/${numeroWhatsApp}?text=Hola,%2520tengo%2520dudas%2520sobre%2520los%2520envíos%2520a%2520provincias.`}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-red-700 font-semibold hover:underline shrink-0"
+      >
+        Consultar cobertura →
+      </a>
     </div>
   </section>
 
@@ -205,7 +250,7 @@ try {
     </div>
   </main>
 
-  <!-- Modal Interactivo Corregido -->
+  <!-- Modal Interactivo -->
   <div id="modal-detalle" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
       <button id="cerrar-modal-btn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
@@ -226,6 +271,34 @@ try {
   </footer>
 
   <script>
+    // 3. Script del Contador Regresivo para el 25 de Diciembre
+    function actualizarContador() {
+      const ahora = new Date();
+      const navidad = new Date(ahora.getFullYear(), 11, 25); // 25 de diciembre
+      if (ahora.getTime() > navidad.getTime()) {
+        navidad.setFullYear(navidad.getFullYear() + 1);
+      }
+      const diferencia = navidad.getTime() - ahora.getTime();
+
+      const dias = Math.floor(diferencia / (1000 * 60 * 60 * 24));
+      const horas = Math.floor((diferencia % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutos = Math.floor((diferencia % (1000 * 60 * 60)) / (1000 * 60));
+      const segundos = Math.floor((diferencia % (1000 * 60)) / 1000);
+
+      const elDias = document.getElementById('dias');
+      const elHoras = document.getElementById('horas');
+      const elMinutos = document.getElementById('minutos');
+      const elSegundos = document.getElementById('segundos');
+
+      if (elDias) elDias.innerText = String(dias);
+      if (elHoras) elHoras.innerText = String(horas).padStart(2, '0');
+      if (elMinutos) elMinutos.innerText = String(minutos).padStart(2, '0');
+      if (elSegundos) elSegundos.innerText = String(segundos).padStart(2, '0');
+    }
+    setInterval(actualizarContador, 1000);
+    actualizarContador();
+
+    // Filtros y Buscador
     const botonesFiltro = document.querySelectorAll('.filtro-btn');
     const tarjetasProductos = document.querySelectorAll('.producto-card');
     const contadorProductos = document.getElementById('contador-productos');
@@ -312,7 +385,7 @@ try {
       });
     });
 
-    // Modal de Detalles
+    // Modal de Detalles Corregido
     const modalDetalle = document.getElementById('modal-detalle');
     const modalTitulo = document.getElementById('modal-titulo');
     const modalDesc = document.getElementById('modal-desc');
@@ -343,7 +416,6 @@ try {
     document.getElementById('cerrar-modal-btn')?.addEventListener('click', cerrarModalDetalle);
     document.getElementById('cerrar-modal-footer')?.addEventListener('click', cerrarModalDetalle);
     
-    // Permitir cerrar haciendo clic fuera del cuadro blanco del modal
     modalDetalle?.addEventListener('click', (e) => {
       if (e.target === modalDetalle) {
         cerrarModalDetalle();
