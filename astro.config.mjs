@@ -1,8 +1,8 @@
-JavaScript
 import { defineConfig } from 'astro/config';
 import vercel from '@astrojs/vercel';
 
+// https://astro.build/config
 export default defineConfig({
-  output: 'server', // Esto hace que la web lea Google Sheets en vivo en cada visita
+  output: 'server',
   adapter: vercel(),
 });

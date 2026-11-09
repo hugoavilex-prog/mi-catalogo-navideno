@@ -1,6 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 
+// Enlace CSV público oficial y estable de tu Google Sheet
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS2ashxyFTq07uDvUqXXB7wYYtKFrVa_bsGbrvLg5sdRhbgEzzqo2z1kIZg8n_MTve4idf-fqRAfcz8/pub?output=csv";
 const numeroWhatsApp = "51982441399";
 
@@ -30,17 +31,20 @@ try {
     return valores;
   };
 
-  const cabeceras = parseCSVLine(lineas[0]);
-  productos = lineas.slice(1).map(linea => {
-    const valores = parseCSVLine(linea);
-    const obj = {};
-    cabeceras.forEach((cabecera, i) => {
-      obj[cabecera.trim()] = valores[i] ? valores[i].trim() : '';
+  if (lineas.length > 0) {
+    const cabeceras = parseCSVLine(lineas[0]);
+    productos = lineas.slice(1).map(linea => {
+      const valores = parseCSVLine(linea);
+      const obj = {};
+      cabeceras.forEach((cabecera, i) => {
+        obj[cabecera.trim()] = valores[i] ? valores[i].trim() : '';
+      });
+      return obj;
     });
-    return obj;
-  });
+  }
 
-  productos = productos.filter(item => item.estado && item.estado.toLowerCase() === 'activo');
+  // Filtramos solo los productos activos
+  productos = productos.filter(item => item.estado && item.estado.toLowerCase().trim() === 'activo');
 } catch (error) {
   console.error("Error al cargar Google Sheets:", error);
 }
@@ -72,14 +76,14 @@ try {
     </div>
   </header>
 
-  <!-- Banner de Campaña con Contador Destacado -->
+  <!-- Banner de Campaña con Contador Dinámico -->
   <section class="bg-gradient-to-r from-red-900 via-rose-950 to-emerald-950 text-white py-10 px-4 text-center relative overflow-hidden">
     <div class="max-w-3xl mx-auto space-y-3 relative z-10">
       <span class="bg-red-500/30 text-red-200 text-xs font-semibold px-3 py-1 rounded-full border border-red-500/40">✨ Campaña Navideña 2026</span>
       <h1 class="text-2xl md:text-4xl font-extrabold tracking-tight">Regalos y Novedades con Envío a Todo el Perú</h1>
       <p class="text-gray-200 text-xs md:text-sm">Asegura tus regalos con anticipación al mejor precio del mercado.</p>
       
-      <!-- Contador con diseño más grande y vistoso -->
+      <!-- Contador Destacado -->
       <div class="pt-2 flex flex-col items-center justify-center">
         <p class="text-xs text-amber-300 uppercase tracking-widest font-semibold mb-2">⏳ Tiempo restante para Navidad:</p>
         <div class="inline-flex items-center gap-2 bg-black/40 backdrop-blur-md px-4 py-2.5 rounded-xl border border-amber-500/40 shadow-md">
@@ -444,4 +448,4 @@ try {
       }
     });
   </script>
-</Layout>  
+</Layout>
