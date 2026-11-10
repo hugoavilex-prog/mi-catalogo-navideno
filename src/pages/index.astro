@@ -155,25 +155,38 @@ try {
             data-badge={item.badge ? item.badge.toLowerCase() : ''}
           >
             <div>
-              <div class="relative bg-gray-50 aspect-square overflow-hidden flex flex-col justify-between p-2">
+              <div 
+                class="relative bg-gray-50 aspect-square overflow-hidden flex flex-col justify-between p-2 cursor-pointer btn-detalle group"
+                data-nombre={item.nombre}
+                data-desc={descripcionSegura}
+                data-precio={`S/ ${precioNum.toFixed(2)}`}
+                data-imagen={item.imagen}
+              >
                 <div class="w-full h-full absolute inset-0 bg-gray-50 flex items-center justify-center p-2">
                   <img 
                     src={item.imagen} 
                     alt={item.nombre} 
-                    class="imagen-principal object-contain w-full h-full"
+                    class="imagen-principal object-contain w-full h-full pointer-events-none group-hover:scale-105 transition-transform duration-300"
                     id={`img-${uniqueId}`}
                     loading="lazy"
                   />
                 </div>
 
+                <!-- Indicador visual de Zoom en la esquina -->
+                <div class="absolute top-2 right-2 bg-black/60 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none shadow-md">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                  </svg>
+                </div>
+
                 {item.badge && (
-                  <span class="absolute top-2 left-2 z-10 bg-red-600 text-white text-[9px] md:text-xs font-bold px-1.5 py-0.5 rounded shadow-xs">
+                  <span class="absolute top-2 left-2 z-10 bg-red-600 text-white text-[9px] md:text-xs font-bold px-1.5 py-0.5 rounded shadow-xs pointer-events-none">
                     {item.badge}
                   </span>
                 )}
 
                 {todasLasFotos.length > 1 && (
-                  <div class="relative z-10 mt-auto flex gap-1 bg-black/50 backdrop-blur-md p-1 rounded overflow-x-auto">
+                  <div class="relative z-10 mt-auto flex gap-1 bg-black/50 backdrop-blur-md p-1 rounded overflow-x-auto" onclick="event.stopPropagation()">
                     {todasLasFotos.map((fotoUrl, fotoIdx) => (
                       <button 
                         type="button"
@@ -216,7 +229,7 @@ try {
                 data-precio={`S/ ${precioNum.toFixed(2)}`}
                 data-imagen={item.imagen}
               >
-                🔍 Ver detalle
+                🔍 Ver detalle y zoom
               </button>
 
               <a 
@@ -278,13 +291,19 @@ try {
     </div>
   </footer>
 
-  <!-- Modal Interactivo -->
-  <div id="modal-detalle" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-md w-full p-6 relative shadow-2xl space-y-4">
-      <button id="cerrar-modal-btn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
-      <img id="modal-img" src="" alt="" class="w-full h-48 object-contain rounded-xl bg-gray-50 p-2" />
+  <!-- Modal Interactivo con Visor Grande de Imagen -->
+  <div id="modal-detalle" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 relative shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <button id="cerrar-modal-btn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer z-10 bg-gray-100 w-8 h-8 rounded-full flex items-center justify-center">✕</button>
+      
+      <!-- Contenedor de la foto en grande (Zoom) -->
+      <div class="w-full h-72 md:h-80 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center p-2 relative group">
+        <img id="modal-img" src="" alt="" class="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105" />
+        <span class="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-2 py-1 rounded-md pointer-events-none">🔍 Vista ampliada</span>
+      </div>
+
       <div>
-        <span id="modal-precio" class="text-emerald-600 font-bold text-lg"></span>
+        <span id="modal-precio" class="text-emerald-600 font-bold text-xl"></span>
         <h3 id="modal-titulo" class="text-xl font-bold text-gray-900 mt-1"></h3>
       </div>
       <p id="modal-desc" class="text-gray-600 text-sm leading-relaxed whitespace-pre-line"></p>
@@ -385,7 +404,7 @@ try {
       });
     }
 
-    // Galería interactiva
+    // Galería interactiva de miniatura (si tiene varias fotos)
     document.querySelectorAll('.minifoto-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -395,6 +414,13 @@ try {
         const imagenPrincipal = document.getElementById(targetId);
         if (imagenPrincipal) {
           imagenPrincipal.setAttribute('src', nuevaUrl);
+        }
+
+        // Actualizar también el atributo data-imagen de la tarjeta principal para que el modal abra la foto seleccionada
+        const card = btn.closest('.producto-card');
+        const btnDetalle = card?.querySelector('.btn-detalle');
+        if (btnDetalle) {
+          btnDetalle.setAttribute('data-imagen', nuevaUrl);
         }
 
         const contenedorMini = btn.parentElement;
@@ -409,7 +435,7 @@ try {
       });
     });
 
-    // Modal de Detalles
+    // Modal de Detalles y Zoom de Imagen
     const modalDetalle = document.getElementById('modal-detalle');
     const modalTitulo = document.getElementById('modal-titulo');
     const modalDesc = document.getElementById('modal-desc');
@@ -421,7 +447,11 @@ try {
         if (modalTitulo) modalTitulo.innerText = btn.getAttribute('data-nombre') || '';
         if (modalDesc) modalDesc.innerText = btn.getAttribute('data-desc') || '';
         if (modalPrecio) modalPrecio.innerText = btn.getAttribute('data-precio') || '';
-        if (modalImg) modalImg.src = btn.getAttribute('data-imagen') || '';
+        
+        // Carga la imagen activa (si cambió de miniatura, carga esa)
+        const imgCard = btn.closest('.producto-card')?.querySelector('.imagen-principal') as HTMLImageElement;
+        const imagenUrl = imgCard ? imgCard.src : (btn.getAttribute('data-imagen') || '');
+        if (modalImg) modalImg.src = imagenUrl;
 
         if (modalDetalle) {
           modalDetalle.classList.remove('hidden');
