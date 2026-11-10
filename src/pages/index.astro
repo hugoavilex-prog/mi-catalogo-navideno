@@ -30,17 +30,19 @@ try {
     return valores;
   };
 
-  const cabeceras = parseCSVLine(lineas[0]);
-  productos = lineas.slice(1).map(linea => {
-    const valores = parseCSVLine(linea);
-    const obj = {};
-    cabeceras.forEach((cabecera, i) => {
-      obj[cabecera.trim()] = valores[i] ? valores[i].trim() : '';
+  if (lineas.length > 0) {
+    const cabeceras = parseCSVLine(lineas[0]);
+    productos = lineas.slice(1).map(linea => {
+      const valores = parseCSVLine(linea);
+      const obj = {};
+      cabeceras.forEach((cabecera, i) => {
+        obj[cabecera.trim()] = valores[i] ? valores[i].trim() : '';
+      });
+      return obj;
     });
-    return obj;
-  });
+  }
 
-  productos = productos.filter(item => item.estado && item.estado.toLowerCase() === 'activo');
+  productos = productos.filter(item => item.estado && item.estado.toLowerCase().trim() === 'activo');
 } catch (error) {
   console.error("Error al cargar Google Sheets:", error);
 }
