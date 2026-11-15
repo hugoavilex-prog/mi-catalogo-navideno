@@ -42,7 +42,35 @@ try {
     });
   }
 
+  // Filtrar solo activos
   productos = productos.filter(item => item.estado && item.estado.toLowerCase().trim() === 'activo');
+
+  // Lógica de ordenamiento: Primero por Categoría, luego por Top (top1, top2, top3), y finalmente por Código
+  productos.sort((a, b) => {
+    // 1. Agrupar por categoría
+    const catA = (a.categoria || '').toLowerCase();
+    const catB = (b.categoria || '').toLowerCase();
+    if (catA !== catB) return catA.localeCompare(catB);
+
+    // 2. Ordenar por Top (top1 va primero que top2, top2 que top3, los vacíos al final)
+    const getTopWeight = (topStr) => {
+      const t = (topStr || '').toLowerCase().trim();
+      if (t === 'top1') return 1;
+      if (t === 'top2') return 2;
+      if (t === 'top3') return 3;
+      return 99; // sin top asignado
+    };
+
+    const pesoA = getTopWeight(a.top);
+    const pesoB = getTopWeight(b.top);
+    if (pesoA !== pesoB) return pesoA - pesoB;
+
+    // 3. Segunda referencia: Correlativo de código (asumiendo que hay una columna 'codigo' o similar, o usamos 'id')
+    const codigoA = (a.codigo || a.id || '').toLowerCase();
+    const codigoB = (b.codigo || b.id || '').toLowerCase();
+    return codigoA.localeCompare(codigoB);
+  });
+
 } catch (error) {
   console.error("Error al cargar Google Sheets:", error);
 }
@@ -81,7 +109,6 @@ try {
       <h1 class="text-2xl md:text-4xl font-extrabold tracking-tight">Regalos y Novedades con Envío a Todo el Perú</h1>
       <p class="text-gray-200 text-xs md:text-sm">Asegura tus regalos con anticipación al mejor precio del mercado.</p>
       
-      <!-- Contador con diseño más grande y vistoso -->
       <div class="pt-2 flex flex-col items-center justify-center">
         <p class="text-xs text-amber-300 uppercase tracking-widest font-semibold mb-2">⏳ Tiempo restante para Navidad:</p>
         <div class="inline-flex items-center gap-2 bg-black/40 backdrop-blur-md px-4 py-2.5 rounded-xl border border-amber-500/40 shadow-md">
@@ -145,6 +172,7 @@ try {
         
         const todasLasFotos = [item.imagen, ...fotosGaleria];
         const uniqueId = `prod-${index}`;
+        const tieneVideo = item.video && item.video.trim().length > 5;
 
         return (
           <div 
@@ -171,6 +199,22 @@ try {
                     loading="lazy"
                   />
                 </div>
+
+                {/* Icono de Play si tiene video */}
+                {tieneVideo && (
+                  <a 
+                    href={item.video} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    onclick="event.stopPropagation()"
+                    class="absolute bottom-2 left-2 z-20 bg-red-600 hover:bg-red-700 text-white p-2 rounded-full shadow-md transition-transform hover:scale-110 flex items-center justify-center"
+                    title="Ver video del producto"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  </a>
+                )}
 
                 <!-- Indicador visual de Zoom en la esquina -->
                 <div class="absolute top-2 right-2 bg-black/60 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none shadow-md">
@@ -247,7 +291,7 @@ try {
     </div>
   </main>
 
-  <!-- SECCIÓN INFERIOR: Barra de Confianza y Métodos de Envío -->
+  <!-- Footer -->
   <footer class="mt-20 border-t border-gray-200">
     <div class="bg-slate-900 text-gray-200 py-4 px-4 text-xs">
       <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-3 text-center md:text-left">
@@ -265,27 +309,6 @@ try {
         </div>
       </div>
     </div>
-
-    <div class="bg-red-50/80 border-t border-red-100 py-5 px-4 text-xs text-gray-700">
-      <div class="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-        <div class="flex items-center gap-3 text-center md:text-left">
-          <span class="text-3xl">📦</span>
-          <div>
-            <p class="font-bold text-gray-900 text-sm">Envíos Rápidos y Seguros a Nivel Nacional</p>
-            <p class="text-gray-600"><strong>Lima Metropolitana:</strong> Despachos en 24-48 horas. | <strong>Provincias:</strong> Envíos diarios vía Shalom, Olva Courier y Marvisur.</p>
-          </div>
-        </div>
-        <a 
-          href={`https://wa.me/${numeroWhatsApp}?text=Hola,%2520tengo%2520dudas%2520sobre%2520los%2520envíos%2520a%2520provincias.`}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="bg-red-700 hover:bg-red-800 text-white font-semibold px-4 py-2 rounded-full transition-colors shrink-0 shadow-xs"
-        >
-          Consultar cobertura →
-        </a>
-      </div>
-    </div>
-
     <div class="bg-slate-950 text-gray-400 py-6 px-4 text-center text-xs">
       <p>🎄 MMP - Campaña Navideña 2026. Todos los derechos reservados.</p>
     </div>
@@ -296,7 +319,6 @@ try {
     <div class="bg-white rounded-2xl max-w-lg w-full p-6 relative shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
       <button id="cerrar-modal-btn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer z-10 bg-gray-100 w-8 h-8 rounded-full flex items-center justify-center">✕</button>
       
-      <!-- Contenedor de la foto en grande (Zoom) -->
       <div class="w-full h-72 md:h-80 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center p-2 relative group">
         <img id="modal-img" src="" alt="" class="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105" />
         <span class="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-2 py-1 rounded-md pointer-events-none">🔍 Vista ampliada</span>
@@ -314,33 +336,6 @@ try {
   </div>
 
   <script>
-    // Script del Contador Regresivo para el 25 de Diciembre
-    function actualizarContador() {
-      const ahora = new Date();
-      const navidad = new Date(ahora.getFullYear(), 11, 25);
-      if (ahora.getTime() > navidad.getTime()) {
-        navidad.setFullYear(navidad.getFullYear() + 1);
-      }
-      const diferencia = navidad.getTime() - ahora.getTime();
-
-      const dias = Math.floor(diferencia / (1000 * 60 * 60 * 24));
-      const horas = Math.floor((diferencia % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutos = Math.floor((diferencia % (1000 * 60 * 60)) / (1000 * 60));
-      const segundos = Math.floor((diferencia % (1000 * 60)) / 1000);
-
-      const elDias = document.getElementById('dias');
-      const elHoras = document.getElementById('horas');
-      const elMinutos = document.getElementById('minutos');
-      const elSegundos = document.getElementById('segundos');
-
-      if (elDias) elDias.innerText = String(dias);
-      if (elHoras) elHoras.innerText = String(horas).padStart(2, '0');
-      if (elMinutos) elMinutos.innerText = String(minutos).padStart(2, '0');
-      if (elSegundos) elSegundos.innerText = String(segundos).padStart(2, '0');
-    }
-    setInterval(actualizarContador, 1000);
-    actualizarContador();
-
     // Filtros y Buscador
     const botonesFiltro = document.querySelectorAll('.filtro-btn');
     const tarjetasProductos = document.querySelectorAll('.producto-card');
@@ -404,7 +399,7 @@ try {
       });
     }
 
-    // Galería interactiva de miniatura (si tiene varias fotos)
+    // Galería interactiva de miniatura
     document.querySelectorAll('.minifoto-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -416,7 +411,6 @@ try {
           imagenPrincipal.setAttribute('src', nuevaUrl);
         }
 
-        // Actualizar también el atributo data-imagen de la tarjeta principal para que el modal abra la foto seleccionada
         const card = btn.closest('.producto-card');
         const btnDetalle = card?.querySelector('.btn-detalle');
         if (btnDetalle) {
@@ -448,7 +442,6 @@ try {
         if (modalDesc) modalDesc.innerText = btn.getAttribute('data-desc') || '';
         if (modalPrecio) modalPrecio.innerText = btn.getAttribute('data-precio') || '';
         
-        // Carga la imagen activa (si cambió de miniatura, carga esa)
         const imgCard = btn.closest('.producto-card')?.querySelector('.imagen-principal') as HTMLImageElement;
         const imagenUrl = imgCard ? imgCard.src : (btn.getAttribute('data-imagen') || '');
         if (modalImg) modalImg.src = imagenUrl;
