@@ -19,9 +19,9 @@
     "imagen": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600&auto=format&fit=crop&q=80",
     "badge": "Oferta"
   },
- {
-    "id": 2,
-    "nombre": "Organizador Modular Multiususo",
+  {
+    "id": 3,
+    "nombre": "Organizador Modular Multiusos",
     "categoria": "Muebles",
     "precio": 120.00,
     "precioAnterior": 150.00,

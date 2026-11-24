@@ -3,120 +3,252 @@ import Layout from '../layouts/Layout.astro';
 
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS2ashxyFTq07uDvUqXXB7wYYtKFrVa_bsGbrvLg5sdRhbgEzzqo2z1kIZg8n_MTve4idf-fqRAfcz8/pub?output=csv";
 const numeroWhatsApp = "51982441399";
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzsd5kgllDfdtD_pRGTJvsx1PpHwKZWh8MBRjEru5rxfBnEWEma8rw7Yj9CPedS6BkKJQ/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzYGUupwWJX0lcIDN76ytUeBopqbrqDdPGj0xq_pL4PcAVc5v-ofWXNHoOHJmW6I24hFg/exec";
 
-let productos = [];
+interface Producto {
+  id: string;
+  nombre: string;
+  categoria: string;
+  precio: number;
+  precioAnterior?: number;
+  descripcion: string;
+  imagen: string;
+  galeria: string[];
+  video?: string;
+  medidas?: string;
+  badge?: string;
+  tags: string;
+  top?: string;
+  estado: string;
+}
+
+function parseRFC4180CSV(csvText: string): string[][] {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+
+  const normalized = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  for (let i = 0; i < normalized.length; i++) {
+    const char = normalized[i];
+    const nextChar = normalized[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentField += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      currentRow.push(currentField.trim());
+      currentField = '';
+    } else if (char === '\n' && !inQuotes) {
+      currentRow.push(currentField.trim());
+      if (currentRow.some(cell => cell.length > 0)) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+      currentField = '';
+    } else {
+      currentField += char;
+    }
+  }
+
+  if (currentField.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentField.trim());
+    if (currentRow.some(cell => cell.length > 0)) {
+      rows.push(currentRow);
+    }
+  }
+
+  return rows;
+}
+
+function esUrlSegura(url?: string): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+function crearSlugEstable(texto: string, indice: number): string {
+  const limpio = texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return limpio ? `prod-${limpio}` : `prod-item-${indice}`;
+}
+
+let productos: Producto[] = [];
+let errorCargaCatalogo = false;
 
 try {
   const response = await fetch(SHEET_CSV_URL);
-  const csvText = await response.text();
-  const lineas = csvText.split('\n').filter(linea => linea.trim() !== '');
-  
-  const parseCSVLine = (linea) => {
-    const valores = [];
-    let enComillas = false;
-    let valorActual = '';
-    for (let i = 0; i < linea.length; i++) {
-      const char = linea[i];
-      if (char === '"') {
-        enComillas = !enComillas;
-      } else if (char === ',' && !enComillas) {
-        valores.push(valorActual.trim().replace(/^"|"$/g, ''));
-        valorActual = '';
-      } else {
-        valorActual += char;
-      }
-    }
-    valores.push(valorActual.trim().replace(/^"|"$/g, ''));
-    return valores;
-  };
-
-  if (lineas.length > 0) {
-    const cabeceras = parseCSVLine(lineas[0]);
-    productos = lineas.slice(1).map(linea => {
-      const valores = parseCSVLine(linea);
-      const obj = {};
-      cabeceras.forEach((cabecera, i) => {
-        obj[cabecera.trim()] = valores[i] ? valores[i].trim() : '';
-      });
-      return obj;
-    });
+  if (!response.ok) {
+    throw new Error(`Error HTTP al obtener CSV: ${response.status}`);
   }
 
-  productos = productos.filter(item => item.estado && item.estado.toLowerCase().trim() === 'activo');
+  const csvText = await response.text();
+  const filas = parseRFC4180CSV(csvText);
 
-  productos.sort((a, b) => {
-    const catA = (a.categoria || '').toLowerCase();
-    const catB = (b.categoria || '').toLowerCase();
-    if (catA !== catB) return catA.localeCompare(catB);
+  if (filas.length > 1) {
+    const cabeceras = filas[0].map(c => c.trim());
 
-    const getTopWeight = (topStr) => {
-      const t = (topStr || '').toLowerCase().trim();
-      if (t === 'top1') return 1;
-      if (t === 'top2') return 2;
-      if (t === 'top3') return 3;
-      return 99;
-    };
+    const rawProductos = filas.slice(1).map((valores, index) => {
+      const filaObj: Record<string, string> = {};
+      cabeceras.forEach((cabecera, colIdx) => {
+        filaObj[cabecera] = valores[colIdx] ?? '';
+      });
 
-    const pesoA = getTopWeight(a.top);
-    const pesoB = getTopWeight(b.top);
-    if (pesoA !== pesoB) return pesoA - pesoB;
+      const precioNum = Number.parseFloat(filaObj.precio || '0');
+      const precioValido = Number.isFinite(precioNum) && precioNum >= 0 ? precioNum : 0;
 
-    const codigoA = (a.codigo || a.id || '').toLowerCase();
-    const codigoB = (b.codigo || b.id || '').toLowerCase();
-    return codigoA.localeCompare(codigoB);
-  });
+      const precioAntNum = Number.parseFloat(filaObj.precioAnterior || '');
+      const precioAnteriorValido =
+        Number.isFinite(precioAntNum) && precioAntNum > precioValido ? precioAntNum : undefined;
 
+      const galeriaSegura = (filaObj.galeria || '')
+        .split(',')
+        .map((f: string) => f.trim())
+        .filter((f: string) => esUrlSegura(f));
+
+      const imagenSegura = esUrlSegura(filaObj.imagen)
+        ? filaObj.imagen.trim()
+        : (galeriaSegura[0] || '/logo.jpg');
+
+      const todasFotosUnicas = Array.from(new Set([imagenSegura, ...galeriaSegura]));
+      const nombreLimpiado = (filaObj.nombre || 'Producto sin nombre').trim();
+      const idEstable = (filaObj.id || filaObj.codigo || '').trim() || crearSlugEstable(nombreLimpiado, index);
+
+      return {
+        id: idEstable,
+        nombre: nombreLimpiado,
+        categoria: (filaObj.categoria || 'General').trim(),
+        precio: precioValido,
+        precioAnterior: precioAnteriorValido,
+        descripcion: (filaObj.descripcion || 'Producto importado de alta calidad con garantía.').trim(),
+        imagen: imagenSegura,
+        galeria: todasFotosUnicas,
+        video: esUrlSegura(filaObj.video) ? filaObj.video.trim() : undefined,
+        medidas: (filaObj.medidas || '').trim() || undefined,
+        badge: (filaObj.badge || '').trim() || undefined,
+        tags: (filaObj.tags || '').trim(),
+        top: (filaObj.top || '').trim(),
+        estado: (filaObj.estado || '').trim()
+      } satisfies Producto;
+    });
+
+    productos = rawProductos.filter(item => item.estado.toLowerCase() === 'activo');
+
+    productos.sort((a, b) => {
+      const catA = a.categoria.toLowerCase();
+      const catB = b.categoria.toLowerCase();
+      if (catA !== catB) return catA.localeCompare(catB);
+
+      const getTopWeight = (topStr?: string): number => {
+        const t = (topStr || '').toLowerCase().trim();
+        if (t === 'top1') return 1;
+        if (t === 'top2') return 2;
+        if (t === 'top3') return 3;
+        return 99;
+      };
+
+      const pesoA = getTopWeight(a.top);
+      const pesoB = getTopWeight(b.top);
+      if (pesoA !== pesoB) return pesoA - pesoB;
+
+      return a.id.localeCompare(b.id);
+    });
+  }
 } catch (error) {
-  console.error("Error al cargar Google Sheets:", error);
+  console.error('Error al cargar Google Sheets:', error);
+  errorCargaCatalogo = true;
 }
+
+const categoriasDinamicas: string[] = Array.from(
+  new Set(
+    productos
+      .map((p: Producto) => p.categoria)
+      .filter((cat: string) => cat.length > 0)
+  )
+);
+
+const badgesEspeciales = [
+  { filtro: 'Oferta', label: '🔥 Ofertas' },
+  { filtro: 'Nuevo', label: '✨ Nuevos' },
+  { filtro: 'Tendencia', label: '⭐ Tendencia' }
+];
 ---
 
 <Layout title="MMP | Regalos y Novedades">
-  <!-- Banner superior para invitados -->
-  <div id="banner-invitado" class="bg-amber-500 text-slate-950 font-bold text-xs py-2 px-4 text-center hidden shadow-sm sticky top-0 z-50 flex items-center justify-center gap-2">
-    <span>🎁 Estás viendo la lista de regalos de <span id="banner-nombre-cumple" class="underline">---</span></span>
-    <button type="button" id="btn-salir-modo-invitado" class="bg-slate-950 text-white px-2 py-0.5 rounded text-[10px] ml-4 cursor-pointer hover:bg-slate-800">Salir / Ver Catálogo General</button>
-  </div>
+  <div
+    id="app-config"
+    data-apps-script-url={APPS_SCRIPT_URL}
+    data-numero-whatsapp={numeroWhatsApp}
+    class="hidden"
+  ></div>
 
-  <!-- Header -->
-  <header class="sticky top-0 z-45 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-xs">
-    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-2 md:gap-4">
-      <div class="flex items-center gap-2 shrink-0">
-        <!-- Logo de la marca -->
-        <a href="/" class="flex items-center gap-2">
-          <img src="/logo.jpg" alt="MMP Tienda Online" class="h-14 md:h-16 w-auto object-contain rounded-md" />
-        </a>
-      </div>
-      
-      <div class="flex-1 max-w-md">
-        <input 
-          type="text" 
-          id="input-buscador" 
-          placeholder="🔍 Buscar producto..." 
-          class="w-full bg-gray-50 text-gray-800 text-xs md:text-sm px-4 py-2 rounded-full border border-gray-200 focus:outline-none focus:border-red-600 shadow-xs"
-        />
-      </div>
-
-      <div class="flex items-center gap-2 shrink-0">
-        <button 
-          id="btn-abrir-menu-lista" 
-          class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs md:text-sm font-semibold px-3 py-2 rounded-full transition-colors cursor-pointer shadow-xs flex items-center gap-1"
-        >
-          🎁 Arma tu Lista
-        </button>
-
-        <a 
-          href={`https://wa.me/${numeroWhatsApp}?text=Hola,%20quisiera%20más%20información%20sobre%20el%20catálogo.`} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-medium px-3 md:px-4 py-2 rounded-full transition-colors shadow-xs flex items-center gap-1.5"
-        >
-          💬 WhatsApp
-        </a>
-      </div>
+  <!-- Contenedor sticky único para banner de invitado y cabecera -->
+  <div class="sticky top-0 z-40 w-full">
+    <div
+      id="banner-invitado"
+      class="bg-amber-500 text-slate-950 font-bold text-xs py-2 px-4 text-center hidden shadow-sm items-center justify-center flex-wrap gap-2"
+    >
+      <span>🎁 Estás viendo la lista de regalos de <span id="banner-nombre-cumple" class="underline">---</span></span>
+      <button
+        type="button"
+        id="btn-salir-modo-invitado"
+        class="bg-slate-950 text-white px-2.5 py-0.5 rounded text-[10px] cursor-pointer hover:bg-slate-800 transition-colors"
+      >
+        Salir / Ver Catálogo General
+      </button>
     </div>
-  </header>
+
+    <header class="bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-xs">
+      <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-2 md:gap-4">
+        <div class="flex items-center gap-2 shrink-0">
+          <a href="/" class="flex items-center gap-2">
+            <img src="/logo.jpg" alt="MMP Tienda Online" class="h-12 md:h-14 w-auto object-contain rounded-md" />
+          </a>
+        </div>
+
+        <div class="flex-1 max-w-md">
+          <input
+            type="text"
+            id="input-buscador"
+            placeholder="🔍 Buscar producto..."
+            class="w-full bg-gray-50 text-gray-800 text-xs md:text-sm px-4 py-2 rounded-full border border-gray-200 focus:outline-none focus:border-red-600 shadow-xs"
+          />
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            id="btn-abrir-menu-lista"
+            class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs md:text-sm font-semibold px-3 py-2 rounded-full transition-colors cursor-pointer shadow-xs flex items-center gap-1"
+          >
+            🎁 Arma tu Lista / Seguimiento
+          </button>
+
+          <a
+            href={`https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent('Hola, quisiera más información sobre el catálogo.')}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-medium px-3 md:px-4 py-2 rounded-full transition-colors shadow-xs flex items-center gap-1.5"
+          >
+            💬 WhatsApp
+          </a>
+        </div>
+      </div>
+    </header>
+  </div>
 
   <!-- Banner Principal con Contador Navideño -->
   <section class="bg-gradient-to-r from-red-900 via-rose-950 to-slate-900 text-white py-8 md:py-10 px-4 text-center relative overflow-hidden">
@@ -124,8 +256,7 @@ try {
       <span class="bg-red-500/30 text-red-200 text-xs font-semibold px-3 py-1 rounded-full border border-red-500/40">✨ Envíos a Todo el Perú</span>
       <h1 class="text-2xl md:text-4xl font-extrabold tracking-tight">MMP - Regalos y Novedades</h1>
       <p class="text-gray-200 text-xs md:text-sm">Explora nuestros productos, arma tu lista de celebración o haz seguimiento a tus regalos con tu código secreto.</p>
-      
-      <!-- Contador Regresivo para Navidad -->
+
       <div id="contador-navidad" class="pt-2 flex justify-center items-center gap-2 md:gap-4 text-center">
         <div class="bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 shadow-inner">
           <span id="dias" class="block text-base md:text-xl font-black text-amber-400 font-mono">00</span>
@@ -152,81 +283,108 @@ try {
 
   <!-- Catálogo -->
   <main class="max-w-6xl mx-auto px-2 md:px-4 py-8">
+    <div
+      id="aviso-lista-invalida"
+      class="hidden mb-6 bg-amber-50 border border-amber-300 text-amber-900 text-xs md:text-sm px-4 py-3 rounded-xl items-center justify-between gap-2"
+    >
+      <span>⚠️ El enlace de lista ingresado no existe o no está disponible. Mostrando el catálogo general.</span>
+      <button type="button" id="btn-cerrar-aviso-lista" class="text-amber-800 font-bold cursor-pointer">✕</button>
+    </div>
+
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 px-2">
       <div>
         <h2 class="text-lg md:text-xl font-bold text-gray-900">Productos Disponibles</h2>
         <span class="text-xs md:text-sm text-gray-500" id="contador-productos">{productos.length} productos en stock</span>
       </div>
 
-      <!-- Filtros -->
       <div class="flex flex-wrap gap-2" id="filtros-container">
-        <button data-filtro="todos" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-red-700 text-white transition-colors cursor-pointer shadow-xs">Todos</button>
-        <button data-filtro="Juguetes" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">Juguetes</button>
-        <button data-filtro="Regalos" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">Regalos</button>
-        <button data-filtro="Ropa" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">Ropa</button>
-        <button data-filtro="Muebles" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">Muebles</button>
-        <button data-filtro="Carteras" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">Carteras</button>
-        <button data-filtro="Oferta" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-red-600 border border-red-200 hover:bg-red-50 transition-colors cursor-pointer">🔥 Ofertas</button>
-        <button data-filtro="Nuevo" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-red-600 border border-red-200 hover:bg-red-50 transition-colors cursor-pointer">✨ Nuevos</button>
-        <button data-filtro="Tendencia" class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-red-600 border border-red-200 hover:bg-red-50 transition-colors cursor-pointer">⭐ Tendencia</button>
+        <button
+          type="button"
+          data-filtro="todos"
+          data-especial="false"
+          class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-red-700 text-white transition-colors cursor-pointer shadow-xs"
+        >
+          Todos
+        </button>
+
+        {categoriasDinamicas.map((cat: string) => (
+          <button
+            type="button"
+            data-filtro={cat}
+            data-especial="false"
+            class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer"
+          >
+            {cat}
+          </button>
+        ))}
+
+        {badgesEspeciales.map((b) => (
+          <button
+            type="button"
+            data-filtro={b.filtro}
+            data-especial="true"
+            class="filtro-btn px-3 py-1.5 text-xs font-semibold rounded-full bg-white text-red-600 border border-red-200 hover:bg-red-50 transition-colors cursor-pointer"
+          >
+            {b.label}
+          </button>
+        ))}
       </div>
     </div>
 
-    <!-- Grid -->
-    <div class="grid grid-cols-3 gap-2 sm:gap-4 md:gap-6" id="grid-productos">
-      {productos.map((item, index) => {
-        const precioNum = parseFloat(item.precio) || 0;
-        const mensajeWp = encodeURIComponent(`Hola, me interesa "${item.nombre}" de S/ ${precioNum.toFixed(2)} visto en la web.`);
-        const linkWp = `https://wa.me/${numeroWhatsApp}?text=${mensajeWp}`;
-        const descripcionSegura = item.descripcion || "Producto importado de alta calidad con garantía.";
+    {errorCargaCatalogo && productos.length === 0 && (
+      <div class="bg-red-50 border border-red-200 text-red-800 text-xs md:text-sm p-4 rounded-xl mb-6 text-center">
+        No se pudo cargar el catálogo en este momento. Intenta recargar la página en unos minutos.
+      </div>
+    )}
 
-        const fotosGaleria = item.galeria 
-          ? item.galeria.split(',').map(f => f.trim()).filter(f => f.length > 5 && f.startsWith('http')) 
-          : [];
-        
-        const todasLasFotos = [item.imagen, ...fotosGaleria];
+    <!-- Grid -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4 md:gap-6" id="grid-productos">
+      {productos.map((item: Producto, index: number) => {
+        const mensajeWp = encodeURIComponent(
+          `Hola, me interesa "${item.nombre}" de S/ ${item.precio.toFixed(2)} visto en la web.`
+        );
+        const linkWp = `https://wa.me/${numeroWhatsApp}?text=${mensajeWp}`;
         const uniqueId = `prod-${index}`;
-        const tieneVideo = item.video && item.video.trim().length > 5;
-        const productId = item.id || item.codigo || `p-${index}`;
 
         return (
-          <div 
+          <div
             class="producto-card bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col justify-between"
-            data-nombre={item.nombre ? item.nombre.toLowerCase() : ''}
-            data-tags={item.tags ? item.tags.toLowerCase() : ''}
-            data-categoria={item.categoria ? item.categoria.toLowerCase() : ''}
-            data-badge={item.badge ? item.badge.toLowerCase() : ''}
+            data-nombre={item.nombre.toLowerCase()}
+            data-tags={item.tags.toLowerCase()}
+            data-categoria={item.categoria.toLowerCase()}
+            data-badge={(item.badge || '').toLowerCase()}
+            data-id={item.id}
+            data-precio-num={String(item.precio)}
           >
             <div>
-              <div 
+              <div
                 class="relative bg-gray-50 aspect-square overflow-hidden flex flex-col justify-between p-2 cursor-pointer btn-detalle group"
                 data-nombre={item.nombre}
-                data-desc={descripcionSegura}
-                data-precio={`S/ ${precioNum.toFixed(2)}`}
+                data-desc={item.descripcion}
+                data-precio={`S/ ${item.precio.toFixed(2)}`}
                 data-imagen={item.imagen}
-                data-id={productId}
+                data-id={item.id}
               >
                 <div class="w-full h-full absolute inset-0 bg-gray-50 flex items-center justify-center p-2">
-                  <img 
-                    src={item.imagen} 
-                    alt={item.nombre} 
+                  <img
+                    src={item.imagen}
+                    alt={item.nombre}
                     class="imagen-principal object-contain w-full h-full pointer-events-none group-hover:scale-105 transition-transform duration-300"
                     id={`img-${uniqueId}`}
                     loading="lazy"
                   />
                 </div>
 
-                {tieneVideo && (
-                  <a 
-                    href={item.video} 
-                    target="_blank" 
+                {item.video && (
+                  <a
+                    href={item.video}
+                    target="_blank"
                     rel="noopener noreferrer"
-                    onclick="event.stopPropagation()"
-                    class="absolute bottom-2 left-2 z-20 bg-red-600 hover:bg-red-700 text-white p-2 rounded-full shadow-md transition-transform hover:scale-110 flex items-center justify-center"
+                    class="stop-prop absolute bottom-2 left-2 z-20 bg-red-600 hover:bg-red-700 text-white p-2 rounded-full shadow-md transition-transform hover:scale-110 flex items-center justify-center"
                     title="Ver video"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z"/>
+                      <path d="M8 5v14l11-7z" />
                     </svg>
                   </a>
                 )}
@@ -237,26 +395,31 @@ try {
                   </span>
                 )}
 
-                {todasLasFotos.length > 1 && (
-                  <div class="relative z-10 mt-auto flex gap-1 bg-black/50 backdrop-blur-md p-1 rounded overflow-x-auto" onclick="event.stopPropagation()">
-                    {todasLasFotos.map((fotoUrl, fotoIdx) => (
-                      <button 
+                {item.galeria.length > 1 && (
+                  <div class="stop-prop relative z-10 mt-auto flex gap-1 bg-black/50 backdrop-blur-md p-1 rounded overflow-x-auto">
+                    {item.galeria.map((fotoUrl: string, fotoIdx: number) => (
+                      <button
                         type="button"
-                        class={`minifoto-btn w-6 h-6 rounded overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${fotoIdx === 0 ? 'border-red-500 scale-105' : 'border-white/50 hover:border-white'}`}
+                        class={`minifoto-btn w-6 h-6 rounded overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
+                          fotoIdx === 0 ? 'border-red-500 scale-105' : 'border-white/50 hover:border-white'
+                        }`}
                         data-target={`img-${uniqueId}`}
                         data-url={fotoUrl}
+                        aria-label={`Ver imagen ${fotoIdx + 1} de ${item.nombre}`}
                       >
                         <img src={fotoUrl} alt="" class="w-full h-full object-cover" />
                       </button>
                     ))}
                   </div>
                 )}
+
+                <div class="etiqueta-estado-invitado hidden absolute inset-x-0 bottom-0 z-30 py-2 px-1 text-center font-black text-xs md:text-sm shadow-lg uppercase tracking-wider pointer-events-none"></div>
               </div>
 
               <div class="p-2 md:p-3 flex flex-col space-y-1">
                 <span class="text-[9px] md:text-xs font-semibold text-red-600 uppercase tracking-wider">{item.categoria}</span>
                 <h3 class="text-xs md:text-sm font-semibold text-gray-900 line-clamp-2 leading-tight">{item.nombre}</h3>
-                
+
                 {item.medidas && (
                   <p class="text-[9px] md:text-xs text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 inline-block">
                     📏 {item.medidas}
@@ -267,30 +430,32 @@ try {
 
             <div class="p-2 md:p-3 pt-0 flex flex-col space-y-1.5">
               <div class="flex items-baseline justify-between border-t border-gray-50 pt-1.5">
-                <span class="text-xs md:text-base font-bold text-gray-900">S/ {precioNum.toFixed(2)}</span>
-                {item.precioAnterior && (
-                  <span class="text-[9px] md:text-xs text-gray-400 line-through">S/ {parseFloat(item.precioAnterior).toFixed(2)}</span>
+                <span class="text-xs md:text-base font-bold text-gray-900">S/ {item.precio.toFixed(2)}</span>
+                {item.precioAnterior !== undefined && (
+                  <span class="text-[9px] md:text-xs text-gray-400 line-through">S/ {item.precioAnterior.toFixed(2)}</span>
                 )}
               </div>
 
               <div class="grid grid-cols-2 gap-1 pt-1">
-                <button 
+                <button
                   type="button"
                   class="btn-detalle bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium text-[9px] md:text-xs py-1.5 rounded-lg transition-colors text-center cursor-pointer"
                   data-nombre={item.nombre}
-                  data-desc={descripcionSegura}
-                  data-precio={`S/ ${precioNum.toFixed(2)}`}
+                  data-desc={item.descripcion}
+                  data-precio={`S/ ${item.precio.toFixed(2)}`}
                   data-imagen={item.imagen}
-                  data-id={productId}
+                  data-id={item.id}
                 >
                   🔍 Detalle
                 </button>
 
-                <a 
+                <a
                   href={linkWp}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[9px] md:text-xs py-1.5 rounded-lg text-center transition-colors shadow-xs flex items-center justify-center"
+                  class="btn-wp-producto bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[9px] md:text-xs py-1.5 rounded-lg text-center transition-colors shadow-xs flex items-center justify-center"
+                  data-nombre={item.nombre}
+                  data-precio={item.precio.toFixed(2)}
                 >
                   WhatsApp
                 </a>
@@ -310,25 +475,44 @@ try {
   <!-- Modal Detalle -->
   <div id="modal-detalle" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-lg w-full p-6 relative shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-      <button id="cerrar-modal-btn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer z-10 bg-gray-100 w-8 h-8 rounded-full flex items-center justify-center">✕</button>
-      
-      <div id="zoom-container" class="w-full h-72 md:h-80 bg-gray-50 rounded-xl overflow-hidden flex items-center justify-center p-2 relative group cursor-grab active:cursor-grabbing select-none">
-        <img id="modal-img" src="" alt="" class="max-w-full max-h-full object-contain transition-transform duration-75 origin-center" />
-        
-        <div class="absolute top-3 left-3 z-20" id="contenedor-btn-accion-modal">
-          <button type="button" id="btn-agregar-desde-detalle" class="bg-pink-600 hover:bg-pink-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-md transition-colors cursor-pointer flex items-center gap-1">
+      <button
+        type="button"
+        id="cerrar-modal-btn"
+        class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer z-10 bg-gray-100 w-8 h-8 rounded-full flex items-center justify-center"
+      >
+        ✕
+      </button>
+
+      <div
+        id="zoom-container"
+        class="w-full h-72 md:h-80 bg-gray-50 rounded-xl overflow-hidden flex items-center justify-center p-2 relative group cursor-grab active:cursor-grabbing select-none touch-none"
+      >
+        <img
+          id="modal-img"
+          src=""
+          alt=""
+          draggable="false"
+          class="max-w-full max-h-full object-contain transition-transform duration-75 origin-center select-none"
+        />
+
+        <div id="contenedor-btn-accion-modal" class="zoom-control absolute top-3 left-3 z-20">
+          <button
+            type="button"
+            id="btn-agregar-desde-detalle"
+            class="bg-pink-600 hover:bg-pink-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-md transition-colors cursor-pointer flex items-center gap-1"
+          >
             ❤️ Agregar a tu Lista
           </button>
         </div>
 
-        <div class="absolute bottom-3 right-3 z-20 flex items-center gap-1 bg-black/60 backdrop-blur-md p-1 rounded-lg text-white shadow-md">
+        <div class="zoom-control absolute bottom-3 right-3 z-20 flex items-center gap-1 bg-black/60 backdrop-blur-md p-1 rounded-lg text-white shadow-md">
           <button type="button" id="zoom-out-btn" class="w-7 h-7 bg-white/20 hover:bg-white/40 rounded flex items-center justify-center font-bold text-sm cursor-pointer">-</button>
           <span id="zoom-nivel" class="text-[10px] px-1 font-mono">100%</span>
           <button type="button" id="zoom-in-btn" class="w-7 h-7 bg-white/20 hover:bg-white/40 rounded flex items-center justify-center font-bold text-sm cursor-pointer">+</button>
           <button type="button" id="zoom-reset-btn" class="w-7 h-7 bg-white/20 hover:bg-white/40 rounded flex items-center justify-center font-bold text-xs cursor-pointer">↺</button>
         </div>
       </div>
-      <p class="text-[10px] text-gray-400 text-center">💡 Haz clic en [+] para acercar y arrastra la imagen para moverte.</p>
+      <p class="text-[10px] text-gray-400 text-center">💡 Usa [+] para acercar y arrastra la imagen para moverte.</p>
 
       <div>
         <span id="modal-precio" class="text-emerald-600 font-bold text-xl"></span>
@@ -336,60 +520,109 @@ try {
       </div>
       <p id="modal-desc" class="text-gray-600 text-sm leading-relaxed whitespace-pre-line"></p>
       <div class="pt-2">
-        <button id="cerrar-modal-footer" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium text-sm py-2.5 rounded-xl transition-colors cursor-pointer">Cerrar</button>
+        <button
+          type="button"
+          id="cerrar-modal-footer"
+          class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium text-sm py-2.5 rounded-xl transition-colors cursor-pointer"
+        >
+          Cerrar
+        </button>
       </div>
     </div>
   </div>
 
-  <!-- Menú / Drawer Principal -->
-  <div id="drawer-menu-lista" class="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col">
+  <!-- Backdrop + Drawer Menú Principal -->
+  <div id="backdrop-drawer" class="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs hidden"></div>
+  <div
+    id="drawer-menu-lista"
+    class="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col"
+  >
     <div class="bg-red-700 text-white p-4 flex items-center justify-between">
       <div class="flex items-center gap-2">
         <span class="text-lg">🎁</span>
         <h3 class="font-bold text-sm">Gestión de Listas y Regalos</h3>
       </div>
-      <button id="cerrar-drawer-menu" class="text-red-200 hover:text-white text-lg font-bold cursor-pointer">✕</button>
+      <button type="button" id="cerrar-drawer-menu" class="text-red-200 hover:text-white text-lg font-bold cursor-pointer">✕</button>
     </div>
 
-    <div class="p-6 space-y-6 flex-1 overflow-y-auto">
-      <!-- Opción 1: Crear Nueva Lista -->
+    <div id="drawer-contenido" class="p-6 space-y-6 flex-1 overflow-y-auto">
       <div class="bg-red-50 border border-red-200 p-4 rounded-xl space-y-2">
         <h4 class="font-bold text-sm text-red-800">✨ Crear una nueva lista de deseos</h4>
         <p class="text-xs text-gray-600">Llena tu formulario directamente para obtener tu código secreto y enlace para compartir.</p>
-        <button type="button" id="btn-abrir-registro" class="w-full bg-red-700 hover:bg-red-800 text-white font-bold text-xs py-2.5 rounded-lg transition-colors cursor-pointer shadow-xs">
+        <button
+          type="button"
+          id="btn-abrir-registro"
+          class="w-full bg-red-700 hover:bg-red-800 text-white font-bold text-xs py-2.5 rounded-lg transition-colors cursor-pointer shadow-xs"
+        >
           Completar Datos del Cumpleañero
         </button>
       </div>
 
-      <!-- Opción 2: Seguimiento con Código de 6 Dígitos -->
       <div class="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3">
         <h4 class="font-bold text-sm text-slate-800">🔍 ¿Ya cuentas con una lista?</h4>
         <p class="text-xs text-gray-600">Ingresa tu código secreto de 6 dígitos para administrar tu lista o ver tus regalos.</p>
         <div class="flex gap-2">
-          <input type="text" id="input-codigo-seguimiento" placeholder="Ej: 482195" maxlength="6" class="flex-1 bg-white text-xs px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:border-red-600 font-mono tracking-widest text-center" />
-          <button type="button" id="btn-consultar-seguimiento" class="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-4 py-2 rounded-lg cursor-pointer">Ingresar</button>
+          <input
+            type="text"
+            id="input-codigo-seguimiento"
+            placeholder="Ej: 482195"
+            inputmode="numeric"
+            maxlength="6"
+            class="flex-1 bg-white text-xs px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:border-red-600 font-mono tracking-widest text-center"
+          />
+          <button
+            type="button"
+            id="btn-consultar-seguimiento"
+            class="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-4 py-2 rounded-lg cursor-pointer"
+          >
+            Ingresar
+          </button>
         </div>
       </div>
 
-      <!-- Panel de la Lista Activa del Papá -->
       <div id="seccion-lista-activa" class="space-y-3 pt-4 border-t border-gray-100 hidden">
-        <div class="bg-emerald-50 border border-emerald-200 p-3 rounded-xl flex items-center justify-between">
+        <div class="bg-emerald-50 border border-emerald-200 p-3 rounded-xl flex items-center justify-between gap-2">
           <div>
             <span class="text-[10px] font-bold text-emerald-800 uppercase">Estás administrando la lista:</span>
             <p id="lbl-lista-activa-nombre" class="text-xs font-bold text-emerald-900">---</p>
           </div>
-          <button type="button" id="btn-cerrar-sesion-lista" class="text-[10px] bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded font-semibold cursor-pointer">Cerrar Sesión</button>
+          <button
+            type="button"
+            id="btn-cerrar-sesion-lista"
+            class="text-[10px] bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded font-semibold cursor-pointer shrink-0"
+          >
+            Cerrar Sesión
+          </button>
         </div>
-        <p class="text-[11px] text-gray-500">Haz clic en los botones de abajo para revisar los regalos o reenviar tu enlace por WhatsApp.</p>
+        <p class="text-[11px] text-gray-500">Revisa quién reservó tus regalos o comparte tu enlace con invitados.</p>
+
+        <div id="acciones-lista-papa" class="space-y-2 pt-1 hidden">
+          <button
+            type="button"
+            id="btn-ver-mi-lista-papa"
+            class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs py-2.5 rounded-lg transition-colors cursor-pointer shadow-xs"
+          >
+            📋 Seguimiento: Ver Quién Reservó mis Regalos
+          </button>
+          <a
+            id="btn-whatsapp-enlace"
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-lg transition-colors shadow-xs flex items-center justify-center gap-1"
+          >
+            💬 Compartir Enlace por WhatsApp
+          </a>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Modal de Registro Directo (Formulario) -->
+  <!-- Modal de Registro Directo -->
   <div id="modal-registro-cumple" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-md w-full p-6 relative shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
       <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">🎂 Datos para la Lista de Deseos</h3>
-      
+
       <form id="form-cumpleanero" class="space-y-3">
         <div>
           <label class="block text-[11px] font-semibold text-gray-700 mb-1">Nombres del Niño(a):</label>
@@ -446,7 +679,7 @@ try {
     <div class="bg-white rounded-2xl max-w-sm w-full p-6 relative shadow-2xl space-y-4 text-center">
       <div class="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-2xl font-bold">🎉</div>
       <h3 class="text-lg font-bold text-gray-900">¡Lista Creada con Éxito!</h3>
-      
+
       <div class="bg-amber-50 border border-amber-200 p-3 rounded-xl space-y-1">
         <p class="text-[11px] text-amber-800 font-semibold">Tu Código Secreto de 6 Dígitos:</p>
         <span id="codigo-generado" class="text-xl font-black text-amber-900 tracking-wider font-mono">---</span>
@@ -460,33 +693,139 @@ try {
         </div>
       </div>
 
-      <button id="btn-empezar-agregar" class="w-full bg-red-700 hover:bg-red-800 text-white text-xs py-3 rounded-xl font-bold cursor-pointer shadow-sm">
+      <button type="button" id="btn-empezar-agregar" class="w-full bg-red-700 hover:bg-red-800 text-white text-xs py-3 rounded-xl font-bold cursor-pointer shadow-sm">
         🎁 Empieza a agregar regalos a tu lista
       </button>
     </div>
   </div>
 
-  <script define:vars={{ APPS_SCRIPT_URL, numeroWhatsApp }}>
+  <!-- Modal Seguimiento Privado del Papá (rellenado vía DOM seguro) -->
+  <div id="modal-ver-propia" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 relative shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <button type="button" id="cerrar-modal-propia" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
+      <h3 id="titulo-modal-propia" class="text-lg font-bold text-gray-900">🎁 Seguimiento de Regalos</h3>
+      <p id="subtitulo-modal-propia" class="text-xs text-gray-500"></p>
+      <div id="lista-items-propia" class="space-y-3 divide-y divide-gray-100"></div>
+      <button type="button" id="btn-cerrar-propia" class="w-full bg-slate-900 text-white text-xs py-2.5 rounded-xl font-bold cursor-pointer mt-4">Cerrar</button>
+    </div>
+  </div>
+
+  <script>
+    interface ListaActivaGuardada {
+      id_lista: string;
+      codigo_acceso: string;
+      nombre_nino?: string;
+      nombreNino?: string;
+    }
+
+    interface ListaInvitadoGuardada {
+      id_lista: string;
+      nombre_nino?: string;
+      nombreNino?: string;
+    }
+
+    interface ItemPublicoLista {
+      id_producto: string;
+      estado: string;
+    }
+
+    interface ItemSeguimientoPrivado {
+      id_producto: string;
+      nombre_producto: string;
+      precio: number;
+      estado: string;
+      comprador: string;
+    }
+
+    interface ProductoModalData {
+      id: string;
+      nombre: string;
+      precio: number;
+      imagen: string;
+    }
+
+    const configEl = document.getElementById('app-config');
+    const APPS_SCRIPT_URL = configEl?.dataset.appsScriptUrl || '';
+    const numeroWhatsApp = configEl?.dataset.numeroWhatsapp || '';
+
+    const CLAVE_LISTA_ACTIVA = 'mmp_lista_activa';
+    const CLAVE_MODO_INVITADO = 'mmp_modo_invitado';
+
+    function leerStorageJSON<T>(clave: string): T | null {
+      try {
+        const raw = localStorage.getItem(clave);
+        if (!raw) return null;
+        return JSON.parse(raw) as T;
+      } catch {
+        localStorage.removeItem(clave);
+        return null;
+      }
+    }
+
+    function obtenerNombreLista(obj?: { nombre_nino?: string; nombreNino?: string } | null): string {
+      if (!obj) return '';
+      return (obj.nombre_nino || obj.nombreNino || '').trim();
+    }
+
+    function normalizarTexto(str: string): string {
+      return str
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+    }
+
+    async function llamarAppsScript<T>(payload: Record<string, unknown>): Promise<T> {
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        throw new Error(`Error de red (${response.status})`);
+      }
+      return (await response.json()) as T;
+    }
+
+    function actualizarScrollBloqueo() {
+      const hayModalAbierto = [
+        document.getElementById('modal-detalle'),
+        document.getElementById('modal-registro-cumple'),
+        document.getElementById('modal-exito-lista'),
+        document.getElementById('modal-ver-propia')
+      ].some(el => el && el.classList.contains('flex'));
+
+      const drawer = document.getElementById('drawer-menu-lista');
+      const drawerAbierto = drawer ? !drawer.classList.contains('translate-x-full') : false;
+
+      document.body.classList.toggle('overflow-hidden', hayModalAbierto || drawerAbierto);
+    }
+
     // --- CONTADOR REGRESIVO PARA NAVIDAD ---
     function actualizarContadorNavidad() {
       const ahora = new Date();
-      let anioActual = ahora.getFullYear();
-      let navidad = new Date(anioActual, 11, 25, 0, 0, 0);
-
-      if (ahora.getTime() > navidad.getTime()) {
-        navidad = new Date(anioActual + 1, 11, 25, 0, 0, 0);
-      }
-
-      const diferencia = navidad.getTime() - ahora.getTime();
-      const dias = Math.floor(diferencia / (1000 * 60 * 60 * 24));
-      const horas = Math.floor((diferencia % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutos = Math.floor((diferencia % (1000 * 60 * 60)) / (1000 * 60));
-      const segundos = Math.floor((diferencia % (1000 * 60)) / 1000);
+      const anioActual = ahora.getFullYear();
+      const inicioNavidad = new Date(anioActual, 11, 25, 0, 0, 0);
+      const finNavidad = new Date(anioActual, 11, 25, 23, 59, 59);
 
       const elDias = document.getElementById('dias');
       const elHoras = document.getElementById('horas');
       const elMinutos = document.getElementById('minutos');
       const elSegundos = document.getElementById('segundos');
+
+      if (ahora >= inicioNavidad && ahora <= finNavidad) {
+        if (elDias) elDias.textContent = '🎄';
+        if (elHoras) elHoras.textContent = 'FELIZ';
+        if (elMinutos) elMinutos.textContent = 'NAVI';
+        if (elSegundos) elSegundos.textContent = 'DAD';
+        return;
+      }
+
+      const objetivo = ahora > finNavidad ? new Date(anioActual + 1, 11, 25, 0, 0, 0) : inicioNavidad;
+      const diferencia = Math.max(0, objetivo.getTime() - ahora.getTime());
+
+      const dias = Math.floor(diferencia / (1000 * 60 * 60 * 24));
+      const horas = Math.floor((diferencia % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutos = Math.floor((diferencia % (1000 * 60 * 60)) / (1000 * 60));
+      const segundos = Math.floor((diferencia % (1000 * 60)) / 1000);
 
       if (elDias) elDias.textContent = String(dias).padStart(2, '0');
       if (elHoras) elHoras.textContent = String(horas).padStart(2, '0');
@@ -497,35 +836,104 @@ try {
     setInterval(actualizarContadorNavidad, 1000);
     actualizarContadorNavidad();
 
-    // Filtros y Buscador
-    const botonesFiltro = document.querySelectorAll('.filtro-btn');
-    const tarjetasProductos = document.querySelectorAll('.producto-card');
+    // --- FILTROS, BUSCADOR Y MODO INVITADO UNIFICADOS ---
+    const botonesFiltro = Array.from(document.querySelectorAll<HTMLButtonElement>('.filtro-btn'));
+    const tarjetasProductos = Array.from(document.querySelectorAll<HTMLElement>('.producto-card'));
     const contadorProductos = document.getElementById('contador-productos');
-    const inputBuscador = document.getElementById('input-buscador');
+    const inputBuscador = document.getElementById('input-buscador') as HTMLInputElement | null;
 
     let categoriaActiva = 'todos';
+    let filtroEsEspecial = false;
     let textoBusqueda = '';
+    let modoInvitadoActivo = false;
+    let idListaInvitadoActual = '';
+    let nombreInvitadoActual = '';
+    let mapaEstadosInvitado = new Map<string, string>();
+
+    const CLASE_WP_ACTIVO =
+      'btn-wp-producto bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-[9px] md:text-xs py-1.5 rounded-lg text-center transition-colors shadow-xs flex items-center justify-center';
+    const CLASE_WP_RESERVADO =
+      'btn-wp-producto bg-gray-300 text-gray-600 font-medium text-[9px] md:text-xs py-1.5 rounded-lg text-center flex items-center justify-center pointer-events-none cursor-not-allowed';
+
+    function actualizarBotonWhatsAppTarjeta(card: HTMLElement, estadoInvitado?: string) {
+      const btnWp = card.querySelector<HTMLAnchorElement>('.btn-wp-producto');
+      if (!btnWp) return;
+
+      const nombreProd = btnWp.dataset.nombre || '';
+      const precioProd = btnWp.dataset.precio || '0.00';
+
+      if (modoInvitadoActivo && estadoInvitado !== undefined) {
+        if (estadoInvitado === 'Reservado') {
+          btnWp.className = CLASE_WP_RESERVADO;
+          btnWp.removeAttribute('href');
+          btnWp.setAttribute('aria-disabled', 'true');
+          btnWp.textContent = 'Reservado';
+        } else {
+          const mensajeLista = encodeURIComponent(
+            `Hola, quiero reservar/comprar "${nombreProd}" (S/ ${precioProd}) de la lista de regalos de ${nombreInvitadoActual || 'celebración'} (ID: ${idListaInvitadoActual}).`
+          );
+          btnWp.className = CLASE_WP_ACTIVO;
+          btnWp.href = `https://wa.me/${numeroWhatsApp}?text=${mensajeLista}`;
+          btnWp.removeAttribute('aria-disabled');
+          btnWp.textContent = 'Reservar';
+        }
+      } else {
+        const mensajeGeneral = encodeURIComponent(
+          `Hola, me interesa "${nombreProd}" de S/ ${precioProd} visto en la web.`
+        );
+        btnWp.className = CLASE_WP_ACTIVO;
+        btnWp.href = `https://wa.me/${numeroWhatsApp}?text=${mensajeGeneral}`;
+        btnWp.removeAttribute('aria-disabled');
+        btnWp.textContent = 'WhatsApp';
+      }
+    }
 
     function aplicarFiltros() {
       let visibles = 0;
+
       tarjetasProductos.forEach(card => {
-        if (card.style.display === 'none' && card.dataset.modoInvitadoOculto) return;
-        
-        const categoriaCard = card.getAttribute('data-categoria') || '';
-        const badgeCard = card.getAttribute('data-badge') || '';
-        const nombreCard = card.getAttribute('data-nombre') || '';
-        const tagsCard = card.getAttribute('data-tags') || '';
+        const prodId = (card.dataset.id || '').trim();
+        const etiquetaEstado = card.querySelector<HTMLElement>('.etiqueta-estado-invitado');
 
-        const coincideCategoria = (
-          categoriaActiva === 'todos' || 
-          categoriaCard.includes(categoriaActiva.toLowerCase()) || 
-          badgeCard.includes(categoriaActiva.toLowerCase())
-        );
+        if (modoInvitadoActivo) {
+          if (!mapaEstadosInvitado.has(prodId)) {
+            card.style.display = 'none';
+            if (etiquetaEstado) etiquetaEstado.classList.add('hidden');
+            return;
+          }
 
-        const coincideTexto = (
-          nombreCard.includes(textoBusqueda) || 
-          tagsCard.includes(textoBusqueda)
-        );
+          const estado = mapaEstadosInvitado.get(prodId) || 'Disponible';
+          if (etiquetaEstado) {
+            if (estado === 'Reservado') {
+              etiquetaEstado.className =
+                'etiqueta-estado-invitado absolute inset-x-0 bottom-0 z-30 py-2.5 px-1 text-center font-black text-xs md:text-sm shadow-lg uppercase tracking-wider bg-red-600 text-white pointer-events-none';
+              etiquetaEstado.textContent = '❌ RESERVADO';
+            } else {
+              etiquetaEstado.className =
+                'etiqueta-estado-invitado absolute inset-x-0 bottom-0 z-30 py-2 px-1 text-center font-black text-xs md:text-sm shadow-lg uppercase tracking-wider bg-emerald-600 text-white pointer-events-none';
+              etiquetaEstado.textContent = '✔️ DISPONIBLE EN LISTA';
+            }
+          }
+          actualizarBotonWhatsAppTarjeta(card, estado);
+        } else {
+          if (etiquetaEstado) etiquetaEstado.classList.add('hidden');
+          actualizarBotonWhatsAppTarjeta(card);
+        }
+
+        const categoriaCard = normalizarTexto(card.dataset.categoria || '');
+        const badgeCard = normalizarTexto(card.dataset.badge || '');
+        const nombreCard = normalizarTexto(card.dataset.nombre || '');
+        const tagsCard = normalizarTexto(card.dataset.tags || '');
+        const filtroNorm = normalizarTexto(categoriaActiva);
+
+        const coincideCategoria =
+          filtroNorm === 'todos' ||
+          (filtroEsEspecial ? badgeCard.includes(filtroNorm) : categoriaCard === filtroNorm);
+
+        const coincideTexto =
+          textoBusqueda === '' ||
+          nombreCard.includes(textoBusqueda) ||
+          tagsCard.includes(textoBusqueda);
 
         if (coincideCategoria && coincideTexto) {
           card.style.display = 'flex';
@@ -536,511 +944,795 @@ try {
       });
 
       if (contadorProductos) {
-        contadorProductos.textContent = `${visibles} productos visibles`;
+        contadorProductos.textContent = modoInvitadoActivo
+          ? `${visibles} regalos visibles en la lista`
+          : `${visibles} productos visibles`;
       }
+    }
+
+    function aplicarEstiloBotonFiltro(botonActivo: HTMLButtonElement) {
+      botonesFiltro.forEach(btn => {
+        const esEspecial = btn.dataset.especial === 'true';
+        btn.classList.remove('bg-red-700', 'text-white', 'shadow-xs', 'bg-white', 'text-gray-700', 'border', 'border-gray-200', 'hover:bg-gray-100', 'text-red-600', 'border-red-200', 'hover:bg-red-50');
+        btn.classList.add('bg-white', 'border', 'hover:bg-gray-50');
+        if (esEspecial) {
+          btn.classList.add('text-red-600', 'border-red-200');
+        } else {
+          btn.classList.add('text-gray-700', 'border-gray-200');
+        }
+      });
+
+      botonActivo.classList.remove('bg-white', 'text-gray-700', 'text-red-600', 'border', 'border-gray-200', 'border-red-200', 'hover:bg-gray-50');
+      botonActivo.classList.add('bg-red-700', 'text-white', 'shadow-xs');
     }
 
     botonesFiltro.forEach(boton => {
       boton.addEventListener('click', () => {
-        botonesFiltro.forEach(b => {
-          b.classList.remove('bg-red-700', 'text-white');
-          b.classList.add('bg-white', 'text-gray-700', 'border', 'border-gray-200');
-        });
-        boton.classList.remove('bg-white', 'text-gray-700', 'border', 'border-gray-200', 'text-red-600', 'border-red-200');
-        boton.classList.add('bg-red-700', 'text-white');
-
-        categoriaActiva = boton.getAttribute('data-filtro') || 'todos';
+        aplicarEstiloBotonFiltro(boton);
+        categoriaActiva = boton.dataset.filtro || 'todos';
+        filtroEsEspecial = boton.dataset.especial === 'true';
         aplicarFiltros();
       });
     });
 
-    if (inputBuscador) {
-      inputBuscador.addEventListener('input', (e) => {
-        textoBusqueda = e.target.value.toLowerCase().trim();
-        aplicarFiltros();
-      });
-    }
+    inputBuscador?.addEventListener('input', (e) => {
+      const target = e.target as HTMLInputElement | null;
+      textoBusqueda = normalizarTexto((target?.value || '').trim());
+      aplicarFiltros();
+    });
 
-    // Galería interactiva
-    document.querySelectorAll('.minifoto-btn').forEach(btn => {
+    // Evitar propagación en elementos interactivos dentro de tarjetas
+    document.querySelectorAll<HTMLElement>('.stop-prop').forEach(el => {
+      el.addEventListener('click', (e) => e.stopPropagation());
+    });
+
+    // Galería de miniaturas
+    document.querySelectorAll<HTMLButtonElement>('.minifoto-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const targetId = btn.getAttribute('data-target');
-        const nuevaUrl = btn.getAttribute('data-url');
-        
-        const imagenPrincipal = document.getElementById(targetId);
-        if (imagenPrincipal) imagenPrincipal.setAttribute('src', nuevaUrl);
+        const targetId = btn.dataset.target;
+        const nuevaUrl = btn.dataset.url;
+        if (!targetId || !nuevaUrl) return;
 
-        const card = btn.closest('.producto-card');
-        const btnDetalle = card?.querySelector('.btn-detalle');
-        if (btnDetalle) btnDetalle.setAttribute('data-imagen', nuevaUrl);
+        const imagenPrincipal = document.getElementById(targetId) as HTMLImageElement | null;
+        if (imagenPrincipal) imagenPrincipal.src = nuevaUrl;
+
+        const card = btn.closest<HTMLElement>('.producto-card');
+        card?.querySelectorAll<HTMLButtonElement>('.minifoto-btn').forEach(b => {
+          b.classList.remove('border-red-500', 'scale-105');
+          b.classList.add('border-white/50', 'hover:border-white');
+        });
+        btn.classList.remove('border-white/50', 'hover:border-white');
+        btn.classList.add('border-red-500', 'scale-105');
+
+        card?.querySelectorAll<HTMLElement>('.btn-detalle').forEach(det => {
+          det.dataset.imagen = nuevaUrl;
+        });
       });
     });
 
-    // --- ZOOM MANUAL ---
+    // --- ZOOM Y PAN CON POINTER EVENTS ---
     const modalDetalle = document.getElementById('modal-detalle');
     const modalTitulo = document.getElementById('modal-titulo');
     const modalDesc = document.getElementById('modal-desc');
     const modalPrecio = document.getElementById('modal-precio');
-    const modalImg = document.getElementById('modal-img');
+    const modalImg = document.getElementById('modal-img') as HTMLImageElement | null;
     const zoomContainer = document.getElementById('zoom-container');
     const zoomInBtn = document.getElementById('zoom-in-btn');
     const zoomOutBtn = document.getElementById('zoom-out-btn');
     const zoomResetBtn = document.getElementById('zoom-reset-btn');
     const zoomNivelSpan = document.getElementById('zoom-nivel');
-    const btnAgregarDesdeDetalle = document.getElementById('btn-agregar-desde-detalle');
+    const btnAgregarDesdeDetalle = document.getElementById('btn-agregar-desde-detalle') as HTMLButtonElement | null;
 
     let escalaActual = 1;
     let posX = 0;
     let posY = 0;
-    let arrastrando = false;
+    let arrastrandoPointer = false;
+    let pointerIdActivo: number | null = null;
     let inicioX = 0;
     let inicioY = 0;
-    let productoActualModal = null;
+    let productoActualModal: ProductoModalData | null = null;
+    let agregandoRegalo = false;
+
+    function limitarPosicionPan() {
+      if (!zoomContainer || !modalImg) return;
+      const maxOffsetX = Math.max(0, ((zoomContainer.clientWidth * escalaActual) - zoomContainer.clientWidth) / 2);
+      const maxOffsetY = Math.max(0, ((zoomContainer.clientHeight * escalaActual) - zoomContainer.clientHeight) / 2);
+      posX = Math.min(maxOffsetX, Math.max(-maxOffsetX, posX));
+      posY = Math.min(maxOffsetY, Math.max(-maxOffsetY, posY));
+    }
 
     function actualizarTransformacion() {
-      if (modalImg) modalImg.style.transform = `translate(${posX}px, ${posY}px) scale(${escalaActual})`;
-      if (zoomNivelSpan) zoomNivelSpan.textContent = `${Math.round(escalaActual * 100)}%`;
+      limitarPosicionPan();
+      if (modalImg) {
+        modalImg.style.transform = `translate(${posX}px, ${posY}px) scale(${escalaActual})`;
+      }
+      if (zoomNivelSpan) {
+        zoomNivelSpan.textContent = `${Math.round(escalaActual * 100)}%`;
+      }
     }
 
     function resetZoomPan() {
       escalaActual = 1;
       posX = 0;
       posY = 0;
+      arrastrandoPointer = false;
+      pointerIdActivo = null;
       actualizarTransformacion();
     }
 
-    zoomInBtn?.addEventListener('click', () => { if (escalaActual < 3) { escalaActual += 0.5; actualizarTransformacion(); } });
-    zoomOutBtn?.addEventListener('click', () => { if (escalaActual > 1) { escalaActual -= 0.5; if (escalaActual === 1) { posX = 0; posY = 0; } actualizarTransformacion(); } });
-    zoomResetBtn?.addEventListener('click', resetZoomPan);
-
-    zoomContainer?.addEventListener('mousedown', (e) => {
-      if (escalaActual > 1) {
-        arrastrando = true;
-        inicioX = e.clientX - posX;
-        inicioY = e.clientY - posY;
-        zoomContainer.style.cursor = 'grabbing';
+    zoomInBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (escalaActual < 3) {
+        escalaActual = Number((escalaActual + 0.5).toFixed(2));
+        actualizarTransformacion();
       }
     });
 
-    window.addEventListener('mousemove', (e) => {
-      if (!arrastrando) return;
+    zoomOutBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (escalaActual > 1) {
+        escalaActual = Number((escalaActual - 0.5).toFixed(2));
+        if (escalaActual === 1) {
+          posX = 0;
+          posY = 0;
+        }
+        actualizarTransformacion();
+      }
+    });
+
+    zoomResetBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      resetZoomPan();
+    });
+
+    zoomContainer?.addEventListener('pointerdown', (e: PointerEvent) => {
+      if ((e.target as HTMLElement | null)?.closest('.zoom-control')) return;
+      if (escalaActual <= 1) return;
+
+      arrastrandoPointer = true;
+      pointerIdActivo = e.pointerId;
+      inicioX = e.clientX - posX;
+      inicioY = e.clientY - posY;
+      zoomContainer.setPointerCapture(e.pointerId);
+      zoomContainer.style.cursor = 'grabbing';
+    });
+
+    zoomContainer?.addEventListener('pointermove', (e: PointerEvent) => {
+      if (!arrastrandoPointer || e.pointerId !== pointerIdActivo) return;
       posX = e.clientX - inicioX;
       posY = e.clientY - inicioY;
       actualizarTransformacion();
     });
 
-    window.addEventListener('mouseup', () => { arrastrando = false; if (zoomContainer) zoomContainer.style.cursor = 'grab'; });
+    function finalizarArrastrePointer(e: PointerEvent) {
+      if (!arrastrandoPointer || e.pointerId !== pointerIdActivo) return;
+      arrastrandoPointer = false;
+      pointerIdActivo = null;
+      if (zoomContainer && zoomContainer.hasPointerCapture(e.pointerId)) {
+        zoomContainer.releasePointerCapture(e.pointerId);
+      }
+      if (zoomContainer) zoomContainer.style.cursor = 'grab';
+    }
 
-    document.querySelectorAll('.btn-detalle').forEach(btn => {
+    zoomContainer?.addEventListener('pointerup', finalizarArrastrePointer);
+    zoomContainer?.addEventListener('pointercancel', finalizarArrastrePointer);
+
+    function configurarBotonModalDetalle() {
+      if (!btnAgregarDesdeDetalle) return;
+      const listaActiva = leerStorageJSON<ListaActivaGuardada>(CLAVE_LISTA_ACTIVA);
+
+      if (modoInvitadoActivo) {
+        btnAgregarDesdeDetalle.textContent = '👀 Regalo de la Lista (Solo Consulta)';
+        btnAgregarDesdeDetalle.className =
+          'bg-slate-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-md cursor-default';
+        btnAgregarDesdeDetalle.disabled = true;
+      } else if (listaActiva?.id_lista && listaActiva?.codigo_acceso) {
+        btnAgregarDesdeDetalle.textContent = agregandoRegalo ? '⏳ Agregando...' : '❤️ Agregar a tu Lista';
+        btnAgregarDesdeDetalle.className = agregandoRegalo
+          ? 'bg-pink-500 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-md cursor-wait opacity-80 flex items-center gap-1'
+          : 'bg-pink-600 hover:bg-pink-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-md transition-colors cursor-pointer flex items-center gap-1';
+        btnAgregarDesdeDetalle.disabled = agregandoRegalo;
+      } else {
+        btnAgregarDesdeDetalle.textContent = '⚠️ Crea o ingresa a una lista primero';
+        btnAgregarDesdeDetalle.className =
+          'bg-gray-500 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-md cursor-not-allowed';
+        btnAgregarDesdeDetalle.disabled = true;
+      }
+    }
+
+    document.querySelectorAll<HTMLElement>('.btn-detalle').forEach(btn => {
       btn.addEventListener('click', () => {
-        const nombre = btn.getAttribute('data-nombre') || '';
-        const desc = btn.getAttribute('data-desc') || '';
-        const precio = btn.getAttribute('data-precio') || '';
-        const productId = btn.getAttribute('data-id') || '';
-        
-        if (modalTitulo) modalTitulo.innerText = nombre;
-        if (modalDesc) modalDesc.innerText = desc;
-        if (modalPrecio) modalPrecio.innerText = precio;
-        
-        const card = btn.closest('.producto-card');
-        const imgCard = card?.querySelector('.imagen-principal');
-        const imagenUrl = imgCard ? imgCard.src : (btn.getAttribute('data-imagen') || '');
-        if (modalImg) modalImg.src = imagenUrl;
+        const nombre = btn.dataset.nombre || '';
+        const desc = btn.dataset.desc || '';
+        const precioTexto = btn.dataset.precio || '';
+        const productId = btn.dataset.id || '';
 
+        const card = btn.closest<HTMLElement>('.producto-card');
+        const imgCard = card?.querySelector<HTMLImageElement>('.imagen-principal');
+        const imagenUrl = (imgCard && imgCard.src) || btn.dataset.imagen || '/logo.jpg';
+
+        if (modalTitulo) modalTitulo.textContent = nombre;
+        if (modalDesc) modalDesc.textContent = desc;
+        if (modalPrecio) modalPrecio.textContent = precioTexto;
+        if (modalImg) {
+          modalImg.src = imagenUrl;
+          modalImg.alt = nombre;
+        }
+
+        const precioLimpio = Number.parseFloat(precioTexto.replace(/[^\d.]/g, ''));
         productoActualModal = {
           id: productId,
-          nombre: nombre,
-          precio: parseFloat(precio.replace('S/', '').trim()) || 0,
+          nombre,
+          precio: Number.isFinite(precioLimpio) ? precioLimpio : 0,
           imagen: imagenUrl
         };
 
-        const listaActiva = JSON.parse(localStorage.getItem('mmp_lista_activa') || 'null');
-        const modoInvitado = localStorage.getItem('mmp_modo_invitado');
-
-        if (btnAgregarDesdeDetalle) {
-          if (modoInvitado) {
-            btnAgregarDesdeDetalle.textContent = '👀 Regalo de la Lista (Solo Consulta)';
-            btnAgregarDesdeDetalle.className = 'bg-slate-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-md cursor-default';
-            btnAgregarDesdeDetalle.disabled = true;
-          } else if (listaActiva) {
-            btnAgregarDesdeDetalle.textContent = '❤️ Agregar a tu Lista';
-            btnAgregarDesdeDetalle.className = 'bg-pink-600 hover:bg-pink-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-md transition-colors cursor-pointer flex items-center gap-1';
-            btnAgregarDesdeDetalle.disabled = false;
-          } else {
-            btnAgregarDesdeDetalle.textContent = '⚠️ Crea o ingresa a una lista primero';
-            btnAgregarDesdeDetalle.className = 'bg-gray-500 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-md cursor-not-allowed';
-            btnAgregarDesdeDetalle.disabled = true;
-          }
-        }
-
+        configurarBotonModalDetalle();
         resetZoomPan();
         modalDetalle?.classList.remove('hidden');
         modalDetalle?.classList.add('flex');
+        actualizarScrollBloqueo();
       });
     });
 
     btnAgregarDesdeDetalle?.addEventListener('click', async () => {
-      const modoInvitado = localStorage.getItem('mmp_modo_invitado');
-      if (modoInvitado) return;
+      if (modoInvitadoActivo || agregandoRegalo || !productoActualModal) return;
 
-      const listaActiva = JSON.parse(localStorage.getItem('mmp_lista_activa') || 'null');
-      if (!listaActiva) {
-        alert("Primero debes crear una lista o ingresar con tu código secreto de 6 dígitos.");
+      const listaActiva = leerStorageJSON<ListaActivaGuardada>(CLAVE_LISTA_ACTIVA);
+      if (!listaActiva?.id_lista || !listaActiva?.codigo_acceso) {
+        alert('Primero debes crear una lista o ingresar con tu código secreto de 6 dígitos.');
         return;
       }
 
+      agregandoRegalo = true;
+      configurarBotonModalDetalle();
+
       try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          body: JSON.stringify({
-            accion: "agregar_item_lista",
-            id_lista: listaActiva.id_lista,
-            item: productoActualModal
-          })
+        const res = await llamarAppsScript<{ result: string; message?: string }>({
+          accion: 'agregar_item_lista',
+          id_lista: listaActiva.id_lista,
+          codigo_acceso: listaActiva.codigo_acceso,
+          item: productoActualModal
         });
-        const res = await response.json();
-        if (res.result === "success") {
+
+        if (res.result === 'success') {
           alert(`¡"${productoActualModal.nombre}" añadido a tu lista de deseos con éxito!`);
-        } else if (res.result === "duplicado") {
-          alert("⚠️ Este producto ya se encuentra registrado en tu lista.");
+        } else if (res.result === 'duplicado') {
+          alert('⚠️ Este producto ya se encuentra registrado en tu lista.');
         } else {
-          alert("Error al agregar el producto: " + res.message);
+          alert('Error al agregar el producto: ' + (res.message || 'Inténtalo de nuevo.'));
         }
       } catch (err) {
         console.error(err);
-        alert("Error de conexión al agregar el producto.");
+        alert('Error de conexión al agregar el producto.');
+      } finally {
+        agregandoRegalo = false;
+        configurarBotonModalDetalle();
       }
     });
 
     function cerrarModalDetalle() {
       modalDetalle?.classList.remove('flex');
       modalDetalle?.classList.add('hidden');
+      actualizarScrollBloqueo();
     }
 
     document.getElementById('cerrar-modal-btn')?.addEventListener('click', cerrarModalDetalle);
     document.getElementById('cerrar-modal-footer')?.addEventListener('click', cerrarModalDetalle);
-    modalDetalle?.addEventListener('click', (e) => { if (e.target === modalDetalle) cerrarModalDetalle(); });
+    modalDetalle?.addEventListener('click', (e) => {
+      if (e.target === modalDetalle) cerrarModalDetalle();
+    });
 
-    // --- GESTIÓN DE LISTAS Y SEGUIMIENTO ---
+    // --- GESTIÓN DE DRAWER, LISTAS Y SEGUIMIENTO ---
     const btnAbrirMenuLista = document.getElementById('btn-abrir-menu-lista');
     const drawerMenuLista = document.getElementById('drawer-menu-lista');
+    const backdropDrawer = document.getElementById('backdrop-drawer');
     const cerrarDrawerMenu = document.getElementById('cerrar-drawer-menu');
-    
+
     const modalRegistroCumple = document.getElementById('modal-registro-cumple');
     const btnAbrirRegistro = document.getElementById('btn-abrir-registro');
     const btnCancelarRegistro = document.getElementById('btn-cancelar-registro');
-    const formCumpleanero = document.getElementById('form-cumpleanero');
-    
+    const formCumpleanero = document.getElementById('form-cumpleanero') as HTMLFormElement | null;
+
     const modalExitoLista = document.getElementById('modal-exito-lista');
     const codigoGeneradoSpan = document.getElementById('codigo-generado');
-    const inputEnlaceCompartir = document.getElementById('input-enlace-compartir');
+    const inputEnlaceCompartir = document.getElementById('input-enlace-compartir') as HTMLInputElement | null;
     const btnCopiarEnlace = document.getElementById('btn-copiar-enlace');
     const btnEmpezarAgregar = document.getElementById('btn-empezar-agregar');
 
-    const inputCodigoSeguimiento = document.getElementById('input-codigo-seguimiento');
-    const btnConsultarSeguimiento = document.getElementById('btn-consultar-seguimiento');
+    const inputCodigoSeguimiento = document.getElementById('input-codigo-seguimiento') as HTMLInputElement | null;
+    const btnConsultarSeguimiento = document.getElementById('btn-consultar-seguimiento') as HTMLButtonElement | null;
 
     const seccionListaActiva = document.getElementById('seccion-lista-activa');
     const lblListaActivaNombre = document.getElementById('lbl-lista-activa-nombre');
     const btnCerrarSesionLista = document.getElementById('btn-cerrar-sesion-lista');
+    const accionesListaPapa = document.getElementById('acciones-lista-papa');
+    const btnVerMiListaPapa = document.getElementById('btn-ver-mi-lista-papa') as HTMLButtonElement | null;
+    const btnWhatsappEnlace = document.getElementById('btn-whatsapp-enlace') as HTMLAnchorElement | null;
 
-    window.addEventListener('DOMContentLoaded', async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const idListaUrl = urlParams.get('lista');
+    const modalVerPropia = document.getElementById('modal-ver-propia');
+    const tituloModalPropia = document.getElementById('titulo-modal-propia');
+    const subtituloModalPropia = document.getElementById('subtitulo-modal-propia');
+    const listaItemsPropia = document.getElementById('lista-items-propia');
 
-      if (idListaUrl) {
-        try {
-          const response = await fetch(APPS_SCRIPT_URL, {
-            method: "POST",
-            body: JSON.stringify({ accion: "consultar_por_id", id_lista: idListaUrl })
-          });
-          const res = await response.json();
-          if (res.result === "success" && res.lista) {
-            localStorage.setItem('mmp_modo_invitado', JSON.stringify(res.lista));
-            document.getElementById('banner-invitado')?.classList.remove('hidden');
-            document.getElementById('banner-nombre-cumple').textContent = res.lista.nombre_nino;
-            
-            await filtrarCatalogoParaInvitado(res.lista.id_lista);
-          }
-        } catch (e) {
-          console.error("Error cargando lista de invitado", e);
-        }
-      } else {
-        const listaActiva = JSON.parse(localStorage.getItem('mmp_lista_activa') || 'null');
-        if (listaActiva) {
-          if (seccionListaActiva) seccionListaActiva.classList.remove('hidden');
-          if (lblListaActivaNombre) lblListaActivaNombre.textContent = `Lista de ${listaActiva.nombreNino} (${listaActiva.id_lista})`;
-          
-          const drawerContent = document.querySelector('#drawer-menu-lista .overflow-y-auto');
-          if (drawerContent && !document.getElementById('btn-ver-mi-lista-papa')) {
-            const divPapa = document.createElement('div');
-            divPapa.className = "space-y-2 mt-3";
-            divPapa.innerHTML = `
-              <button id="btn-ver-mi-lista-papa" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs py-2.5 rounded-lg transition-colors cursor-pointer shadow-xs">
-                📋 Seguimiento: Ver Quién Reservó mis Regalos
-              </button>
-              <a id="btn-whatsapp-enlace" href="#" target="_blank" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 rounded-lg transition-colors shadow-xs flex items-center justify-center gap-1">
-                💬 Reenviar Enlace por WhatsApp
-              </a>
-            `;
-            drawerContent.appendChild(divPapa);
+    let consultandoSeguimiento = false;
 
-            const enlaceActualCompartir = `${window.location.origin}${window.location.pathname}?lista=${listaActiva.id_lista}`;
-            const textoWp = encodeURIComponent(`¡Hola! Aquí te comparto la lista de regalos de ${listaActiva.nombreNino} en MMP: ${enlaceActualCompartir}`);
-            document.getElementById('btn-whatsapp-enlace').href = `https://wa.me/${numeroWhatsApp}?text=${textoWp}`;
+    function abrirDrawer() {
+      drawerMenuLista?.classList.remove('translate-x-full');
+      backdropDrawer?.classList.remove('hidden');
+      actualizarScrollBloqueo();
+    }
 
-            document.getElementById('btn-ver-mi-lista-papa').addEventListener('click', async () => {
-              drawerMenuLista?.classList.add('translate-x-full');
-              await abrirModalSeguimientoPapa(listaActiva.id_lista, listaActiva.nombreNino);
-            });
-          }
-        }
-      }
+    function cerrarDrawer() {
+      drawerMenuLista?.classList.add('translate-x-full');
+      backdropDrawer?.classList.add('hidden');
+      actualizarScrollBloqueo();
+    }
+
+    function cerrarModalRegistro() {
+      modalRegistroCumple?.classList.remove('flex');
+      modalRegistroCumple?.classList.add('hidden');
+      actualizarScrollBloqueo();
+    }
+
+    function cerrarModalExito() {
+      modalExitoLista?.classList.remove('flex');
+      modalExitoLista?.classList.add('hidden');
+      actualizarScrollBloqueo();
+    }
+
+    function cerrarModalPropia() {
+      modalVerPropia?.classList.remove('flex');
+      modalVerPropia?.classList.add('hidden');
+      actualizarScrollBloqueo();
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (modalDetalle?.classList.contains('flex')) cerrarModalDetalle();
+      else if (modalRegistroCumple?.classList.contains('flex')) cerrarModalRegistro();
+      else if (modalExitoLista?.classList.contains('flex')) cerrarModalExito();
+      else if (modalVerPropia?.classList.contains('flex')) cerrarModalPropia();
+      else if (drawerMenuLista && !drawerMenuLista.classList.contains('translate-x-full')) cerrarDrawer();
     });
 
-    // Vista de Invitado: SOLO ve Disponible / Reservado (SIN MOSTRAR EL NOMBRE DE QUIÉN LO COMPRÓ)
-    async function filtrarCatalogoParaInvitado(idLista) {
-      try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          body: JSON.stringify({ accion: "obtener_items_lista", id_lista: idLista })
-        });
-        const res = await response.json();
-        if (res.result === "success") {
-          const itemsLista = res.items || [];
-          const idsPermitidos = itemsLista.map(i => String(i.id_producto).trim());
+    function mostrarAvisoListaInvalida() {
+      const avisoInvalida = document.getElementById('aviso-lista-invalida');
+      avisoInvalida?.classList.remove('hidden');
+      avisoInvalida?.classList.add('flex');
+    }
 
-          tarjetasProductos.forEach(card => {
-            const btnDetalle = card.querySelector('.btn-detalle');
-            const prodId = btnDetalle?.getAttribute('data-id') || '';
-            
-            if (idsPermitidos.includes(String(prodId).trim())) {
-              card.style.display = 'flex';
-              card.dataset.modoInvitadoOculto = "";
-              
-              const itemInfo = itemsLista.find(i => String(i.id_producto).trim() === String(prodId).trim());
-              const contenedorImg = card.querySelector('.relative');
-              
-              if (itemInfo) {
-                let etiquetaEstado = card.querySelector('.etiqueta-estado-invitado');
-                if (!etiquetaEstado) {
-                  etiquetaEstado = document.createElement('div');
-                  etiquetaEstado.className = 'etiqueta-estado-invitado absolute inset-x-0 bottom-0 z-30 py-2 px-1 text-center font-black text-xs md:text-sm shadow-lg uppercase tracking-wider';
-                  contenedorImg.appendChild(etiquetaEstado);
-                }
+    function ocultarAvisoListaInvalida() {
+      const avisoInvalida = document.getElementById('aviso-lista-invalida');
+      avisoInvalida?.classList.add('hidden');
+      avisoInvalida?.classList.remove('flex');
+    }
 
-                if (itemInfo.estado === "Reservado") {
-                  etiquetaEstado.className = 'etiqueta-estado-invitado absolute inset-x-0 bottom-0 z-30 py-2.5 px-1 text-center font-black text-xs md:text-sm shadow-lg uppercase tracking-wider bg-red-600 text-white animate-pulse';
-                  etiquetaEstado.textContent = `❌ RESERVADO`;
-                } else {
-                  etiquetaEstado.className = 'etiqueta-estado-invitado absolute inset-x-0 bottom-0 z-30 py-2 px-1 text-center font-black text-xs md:text-sm shadow-lg uppercase tracking-wider bg-emerald-600 text-white';
-                  etiquetaEstado.textContent = `✔️ DISPONIBLE EN LISTA`;
-                }
-              }
-            } else {
-              card.style.display = 'none';
-              card.dataset.modoInvitadoOculto = "true";
-            }
-          });
+    function limpiarEstadoInvitadoUI() {
+      localStorage.removeItem(CLAVE_MODO_INVITADO);
+      modoInvitadoActivo = false;
+      idListaInvitadoActual = '';
+      nombreInvitadoActual = '';
+      mapaEstadosInvitado.clear();
+      const bannerInvitado = document.getElementById('banner-invitado');
+      bannerInvitado?.classList.add('hidden');
+      bannerInvitado?.classList.remove('flex');
+    }
 
-          if (contadorProductos) {
-            contadorProductos.textContent = `${idsPermitidos.length} regalos únicos en la lista`;
-          }
+    function refrescarPanelListaActiva() {
+      const listaActiva = leerStorageJSON<ListaActivaGuardada>(CLAVE_LISTA_ACTIVA);
+      if (listaActiva && listaActiva.id_lista && listaActiva.codigo_acceso) {
+        const nombreMostrar = obtenerNombreLista(listaActiva) || 'Cumpleañero';
+        seccionListaActiva?.classList.remove('hidden');
+        accionesListaPapa?.classList.remove('hidden');
+        if (lblListaActivaNombre) {
+          lblListaActivaNombre.textContent = `Lista de ${nombreMostrar} (${listaActiva.id_lista})`;
         }
-      } catch (err) {
-        console.error("Error filtrando catálogo para invitado", err);
+
+        const enlaceActualCompartir = `${window.location.origin}${window.location.pathname}?lista=${encodeURIComponent(listaActiva.id_lista)}`;
+        const textoWp = encodeURIComponent(
+          `¡Hola! Aquí te comparto la lista de regalos de ${nombreMostrar} en MMP: ${enlaceActualCompartir}`
+        );
+        if (btnWhatsappEnlace) {
+          btnWhatsappEnlace.href = `https://wa.me/?text=${textoWp}`;
+        }
+      } else {
+        seccionListaActiva?.classList.add('hidden');
+        accionesListaPapa?.classList.add('hidden');
       }
     }
 
-    // Vista de Seguimiento del Papá: AQUÍ SÍ VE QUIÉN RESERVÓ
-    async function abrirModalSeguimientoPapa(idLista, nombreNino) {
+    async function cargarVistaInvitado(idListaUrl: string) {
+      const bannerInvitado = document.getElementById('banner-invitado');
+      const bannerNombreCumple = document.getElementById('banner-nombre-cumple');
+
       try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          body: JSON.stringify({ accion: "obtener_items_lista", id_lista: idLista })
+        const resLista = await llamarAppsScript<{ result: string; lista?: ListaInvitadoGuardada }>({
+          accion: 'consultar_por_id',
+          id_lista: idListaUrl
         });
-        const res = await response.json();
-        if (res.result === "success") {
-          const items = res.items || [];
-          
-          let contenidoHtml = `
-            <div id="modal-ver-propia" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-              <div class="bg-white rounded-2xl max-w-lg w-full p-6 relative shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-                <button id="cerrar-modal-propia" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer">✕</button>
-                <h3 class="text-lg font-bold text-gray-900">🎁 Seguimiento: Regalos de ${nombreNino}</h3>
-                <p class="text-xs text-gray-500">ID de Lista: <b>${idLista}</b></p>
-                
-                <div class="space-y-3 divide-y divide-gray-100">
-          `;
 
-          if (items.length === 0) {
-            contenidoHtml += `<p class="text-xs text-gray-500 py-4 text-center">Aún no has agregado regalos a tu lista.</p>`;
-          } else {
-            items.forEach(it => {
-              const esReservado = it.estado === "Reservado";
-              contenidoHtml += `
-                <div class="pt-3 flex items-center justify-between text-xs">
-                  <div>
-                    <p class="font-bold text-gray-800">${it.nombre_producto}</p>
-                    <p class="text-emerald-600 font-semibold">S/ ${parseFloat(it.precio || 0).toFixed(2)}</p>
-                  </div>
-                  <div class="text-right">
-                    <span class="px-2.5 py-1 rounded text-[11px] font-extrabold block ${esReservado ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300'}">
-                      ${esReservado ? '❌ Reservado' : '⏳ Disponible'}
-                    </span>
-                    ${esReservado && it.comprador ? `<span class="text-[10px] text-gray-600 mt-1 block font-medium">👤 ${it.comprador}</span>` : ''}
-                  </div>
-                </div>
-              `;
-            });
-          }
+        if (resLista.result !== 'success' || !resLista.lista) {
+          limpiarEstadoInvitadoUI();
+          mostrarAvisoListaInvalida();
+          aplicarFiltros();
+          return;
+        }
 
-          contenidoHtml += `
-                </div>
-                <button id="btn-cerrar-propia" class="w-full bg-slate-900 text-white text-xs py-2.5 rounded-xl font-bold cursor-pointer mt-4">Cerrar</button>
-              </div>
-            </div>
-          `;
+        const resItems = await llamarAppsScript<{ result: string; items?: ItemPublicoLista[] }>({
+          accion: 'obtener_items_lista',
+          id_lista: idListaUrl
+        });
 
-          const divTemp = document.createElement('div');
-          divTemp.innerHTML = contenidoHtml;
-          document.body.appendChild(divTemp);
+        if (resItems.result !== 'success') {
+          limpiarEstadoInvitadoUI();
+          mostrarAvisoListaInvalida();
+          aplicarFiltros();
+          return;
+        }
 
-          document.getElementById('cerrar-modal-propia').addEventListener('click', () => divTemp.remove());
-          document.getElementById('btn-cerrar-propia').addEventListener('click', () => divTemp.remove());
+        const nombreCumple = obtenerNombreLista(resLista.lista) || 'Invitado';
+        localStorage.setItem(CLAVE_MODO_INVITADO, JSON.stringify(resLista.lista));
+        modoInvitadoActivo = true;
+        idListaInvitadoActual = idListaUrl;
+        nombreInvitadoActual = nombreCumple;
+
+        if (bannerNombreCumple) bannerNombreCumple.textContent = nombreCumple;
+        bannerInvitado?.classList.remove('hidden');
+        bannerInvitado?.classList.add('flex');
+        ocultarAvisoListaInvalida();
+
+        mapaEstadosInvitado.clear();
+        if (Array.isArray(resItems.items)) {
+          resItems.items.forEach(item => {
+            if (item && item.id_producto) {
+              mapaEstadosInvitado.set(String(item.id_producto).trim(), String(item.estado || 'Disponible').trim());
+            }
+          });
+        }
+
+        aplicarFiltros();
+      } catch (e) {
+        console.error('Error cargando lista de invitado:', e);
+        limpiarEstadoInvitadoUI();
+        mostrarAvisoListaInvalida();
+        aplicarFiltros();
+      }
+    }
+
+    function renderizarSeguimientoSeguro(items: ItemSeguimientoPrivado[], nombreNino: string, idLista: string) {
+      if (tituloModalPropia) {
+        tituloModalPropia.textContent = `🎁 Seguimiento: Regalos de ${nombreNino || 'Lista'}`;
+      }
+      if (subtituloModalPropia) {
+        subtituloModalPropia.textContent = '';
+        const strong = document.createElement('strong');
+        strong.textContent = idLista;
+        subtituloModalPropia.append('ID de Lista: ', strong);
+      }
+      if (!listaItemsPropia) return;
+
+      listaItemsPropia.textContent = '';
+
+      if (items.length === 0) {
+        const vacio = document.createElement('p');
+        vacio.className = 'text-xs text-gray-500 py-4 text-center';
+        vacio.textContent = 'Aún no has agregado regalos a tu lista.';
+        listaItemsPropia.appendChild(vacio);
+        return;
+      }
+
+      items.forEach(it => {
+        const esReservado = String(it.estado || '').trim() === 'Reservado';
+        const precioNum = Number.isFinite(Number(it.precio)) ? Number(it.precio) : 0;
+
+        const fila = document.createElement('div');
+        fila.className = 'pt-3 flex items-center justify-between gap-3 text-xs';
+
+        const izq = document.createElement('div');
+        const pNombre = document.createElement('p');
+        pNombre.className = 'font-bold text-gray-800';
+        pNombre.textContent = String(it.nombre_producto || '');
+
+        const pPrecio = document.createElement('p');
+        pPrecio.className = 'text-emerald-600 font-semibold';
+        pPrecio.textContent = `S/ ${precioNum.toFixed(2)}`;
+
+        izq.append(pNombre, pPrecio);
+
+        const der = document.createElement('div');
+        der.className = 'text-right shrink-0';
+
+        const badge = document.createElement('span');
+        badge.className = esReservado
+          ? 'px-2.5 py-1 rounded text-[11px] font-extrabold block bg-red-100 text-red-800 border border-red-300'
+          : 'px-2.5 py-1 rounded text-[11px] font-extrabold block bg-emerald-100 text-emerald-800 border border-emerald-300';
+        badge.textContent = esReservado ? '❌ Reservado' : '⏳ Disponible';
+        der.appendChild(badge);
+
+        if (esReservado && it.comprador) {
+          const spanComp = document.createElement('span');
+          spanComp.className = 'text-[10px] text-gray-600 mt-1 block font-medium';
+          spanComp.textContent = `👤 ${String(it.comprador)}`;
+          der.appendChild(spanComp);
+        }
+
+        fila.append(izq, der);
+        listaItemsPropia.appendChild(fila);
+      });
+    }
+
+    async function abrirModalSeguimientoPapa(listaActiva: ListaActivaGuardada) {
+      if (consultandoSeguimiento) return;
+      consultandoSeguimiento = true;
+      const textoOriginal = btnVerMiListaPapa?.textContent || '📋 Seguimiento: Ver Quién Reservó mis Regalos';
+      if (btnVerMiListaPapa) {
+        btnVerMiListaPapa.disabled = true;
+        btnVerMiListaPapa.textContent = '⏳ Cargando seguimiento...';
+      }
+
+      try {
+        const res = await llamarAppsScript<{ result: string; items?: ItemSeguimientoPrivado[]; message?: string }>({
+          accion: 'obtener_seguimiento_lista',
+          id_lista: listaActiva.id_lista,
+          codigo_acceso: listaActiva.codigo_acceso
+        });
+
+        if (res.result === 'success') {
+          const nombreMostrar = obtenerNombreLista(listaActiva) || 'Lista';
+          renderizarSeguimientoSeguro(res.items || [], nombreMostrar, listaActiva.id_lista);
+          cerrarDrawer();
+          modalVerPropia?.classList.remove('hidden');
+          modalVerPropia?.classList.add('flex');
+          actualizarScrollBloqueo();
+        } else {
+          alert(res.message || 'No se pudo cargar el seguimiento de tu lista.');
         }
       } catch (e) {
         console.error(e);
-        alert("Error al cargar los detalles de la lista.");
+        alert('Error al cargar los detalles de la lista.');
+      } finally {
+        consultandoSeguimiento = false;
+        if (btnVerMiListaPapa) {
+          btnVerMiListaPapa.disabled = false;
+          btnVerMiListaPapa.textContent = textoOriginal;
+        }
       }
     }
 
+    async function iniciarSesionConCodigo(codigoAcceso: string, mostrarBienvenida = true): Promise<boolean> {
+      const res = await llamarAppsScript<{
+        result: string;
+        lista?: ListaActivaGuardada;
+        message?: string;
+      }>({
+        accion: 'consultar_lista',
+        codigo_acceso: codigoAcceso
+      });
+
+      if (res.result === 'success' && res.lista) {
+        limpiarEstadoInvitadoUI();
+        ocultarAvisoListaInvalida();
+        const listaNormalizada: ListaActivaGuardada = {
+          ...res.lista,
+          codigo_acceso: res.lista.codigo_acceso || codigoAcceso
+        };
+        localStorage.setItem(CLAVE_LISTA_ACTIVA, JSON.stringify(listaNormalizada));
+        refrescarPanelListaActiva();
+        aplicarFiltros();
+        if (mostrarBienvenida) {
+          const nombreMostrar = obtenerNombreLista(listaNormalizada) || 'tu lista';
+          alert(`¡Bienvenido de nuevo! Has cargado la lista de ${nombreMostrar}. Ya puedes administrar tus regalos.`);
+        }
+        return true;
+      }
+
+      alert(res.message || 'No se encontró ninguna lista con ese código.');
+      return false;
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const idListaUrl = (urlParams.get('lista') || '').trim();
+      const codigoUrl = (urlParams.get('codigo') || '').trim();
+
+      if (codigoUrl) {
+        window.history.replaceState({}, '', window.location.pathname);
+        if (/^\d{6}$/.test(codigoUrl)) {
+          try {
+            const cargado = await iniciarSesionConCodigo(codigoUrl, false);
+            if (cargado) {
+              abrirDrawer();
+              return;
+            }
+          } catch (e) {
+            console.error('Error al ingresar con enlace privado:', e);
+            alert('No se pudo cargar tu lista desde el enlace. Intenta ingresar con tu código de 6 dígitos.');
+          }
+        }
+      }
+
+      if (idListaUrl) {
+        await cargarVistaInvitado(idListaUrl);
+      } else {
+        limpiarEstadoInvitadoUI();
+        ocultarAvisoListaInvalida();
+        refrescarPanelListaActiva();
+        aplicarFiltros();
+      }
+    });
+
+    btnVerMiListaPapa?.addEventListener('click', async () => {
+      const listaActiva = leerStorageJSON<ListaActivaGuardada>(CLAVE_LISTA_ACTIVA);
+      if (!listaActiva?.id_lista || !listaActiva?.codigo_acceso) {
+        alert('Ingresa primero con tu código secreto de 6 dígitos.');
+        return;
+      }
+      await abrirModalSeguimientoPapa(listaActiva);
+    });
+
+    document.getElementById('cerrar-modal-propia')?.addEventListener('click', cerrarModalPropia);
+    document.getElementById('btn-cerrar-propia')?.addEventListener('click', cerrarModalPropia);
+    modalVerPropia?.addEventListener('click', (e) => {
+      if (e.target === modalVerPropia) cerrarModalPropia();
+    });
+
+    document.getElementById('btn-cerrar-aviso-lista')?.addEventListener('click', ocultarAvisoListaInvalida);
+
     document.getElementById('btn-salir-modo-invitado')?.addEventListener('click', () => {
-      localStorage.removeItem('mmp_modo_invitado');
+      localStorage.removeItem(CLAVE_MODO_INVITADO);
       window.location.href = window.location.pathname;
     });
 
-    btnAbrirMenuLista?.addEventListener('click', () => drawerMenuLista?.classList.remove('translate-x-full'));
-    cerrarDrawerMenu?.addEventListener('click', () => drawerMenuLista?.classList.add('translate-x-full'));
+    btnAbrirMenuLista?.addEventListener('click', abrirDrawer);
+    cerrarDrawerMenu?.addEventListener('click', cerrarDrawer);
+    backdropDrawer?.addEventListener('click', cerrarDrawer);
 
     btnAbrirRegistro?.addEventListener('click', () => {
-      drawerMenuLista?.classList.add('translate-x-full');
+      cerrarDrawer();
       modalRegistroCumple?.classList.remove('hidden');
       modalRegistroCumple?.classList.add('flex');
+      actualizarScrollBloqueo();
     });
 
-    btnCancelarRegistro?.addEventListener('click', () => {
-      modalRegistroCumple?.classList.remove('flex');
-      modalRegistroCumple?.classList.add('hidden');
+    btnCancelarRegistro?.addEventListener('click', cerrarModalRegistro);
+    modalRegistroCumple?.addEventListener('click', (e) => {
+      if (e.target === modalRegistroCumple) cerrarModalRegistro();
     });
 
     btnCerrarSesionLista?.addEventListener('click', () => {
-      localStorage.removeItem('mmp_lista_activa');
-      if (seccionListaActiva) seccionListaActiva.classList.add('hidden');
-      alert("Has cerrado sesión de tu lista activa.");
-      window.location.reload();
+      localStorage.removeItem(CLAVE_LISTA_ACTIVA);
+      refrescarPanelListaActiva();
+      alert('Has cerrado sesión de tu lista activa.');
     });
 
     formCumpleanero?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      
-      const nombreNino = document.getElementById('reg-nombre').value;
-      const apellidoPat = document.getElementById('reg-pat').value;
-      const apellidoMat = document.getElementById('reg-mat').value;
-      const fechaCumple = document.getElementById('reg-fechacumple').value;
-      const fechaCelebracion = document.getElementById('reg-fechafiesta').value;
-      const celular = document.getElementById('reg-celular').value;
-      const correoPrincipal = document.getElementById('reg-correoprincipal').value;
-      const correoSecundario = document.getElementById('reg-correosecundario').value;
 
-      const btnSubmit = formCumpleanero.querySelector('button[type="submit"]');
-      if (btnSubmit) { btnSubmit.textContent = 'Creando...'; btnSubmit.disabled = true; }
+      const nombreNino = (document.getElementById('reg-nombre') as HTMLInputElement | null)?.value.trim() || '';
+      const apellidoPat = (document.getElementById('reg-pat') as HTMLInputElement | null)?.value.trim() || '';
+      const apellidoMat = (document.getElementById('reg-mat') as HTMLInputElement | null)?.value.trim() || '';
+      const fechaCumple = (document.getElementById('reg-fechacumple') as HTMLInputElement | null)?.value || '';
+      const fechaCelebracion = (document.getElementById('reg-fechafiesta') as HTMLInputElement | null)?.value || '';
+      const celular = (document.getElementById('reg-celular') as HTMLInputElement | null)?.value.trim() || '';
+      const correoPrincipal = (document.getElementById('reg-correoprincipal') as HTMLInputElement | null)?.value.trim() || '';
+      const correoSecundario = (document.getElementById('reg-correosecundario') as HTMLInputElement | null)?.value.trim() || '';
+
+      const btnSubmit = formCumpleanero.querySelector<HTMLButtonElement>('button[type="submit"]');
+      if (btnSubmit) {
+        btnSubmit.textContent = 'Creando...';
+        btnSubmit.disabled = true;
+      }
 
       try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          body: JSON.stringify({
-            accion: "crear_lista",
-            nombreNino, apellidoPat, apellidoMat, fechaCumple, fechaCelebracion, celular, correoPrincipal, correoSecundario
-          })
+        const urlBase = `${window.location.origin}${window.location.pathname}`;
+        const resultado = await llamarAppsScript<{
+          result: string;
+          id_lista?: string;
+          codigo_acceso?: string;
+          nombre_nino?: string;
+          message?: string;
+        }>({
+          accion: 'crear_lista',
+          nombreNino,
+          apellidoPat,
+          apellidoMat,
+          fechaCumple,
+          fechaCelebracion,
+          celular,
+          correoPrincipal,
+          correoSecundario,
+          urlBase
         });
 
-        const resultado = await response.json();
+        if (resultado.result === 'success' && resultado.id_lista && resultado.codigo_acceso) {
+          limpiarEstadoInvitadoUI();
+          ocultarAvisoListaInvalida();
+          if (window.location.search) {
+            window.history.replaceState({}, '', window.location.pathname);
+          }
 
-        if (resultado.result === "success") {
-          const infoNueva = {
+          const nombreGuardado = (resultado.nombre_nino || nombreNino).trim();
+          const infoNueva: ListaActivaGuardada = {
             id_lista: resultado.id_lista,
             codigo_acceso: resultado.codigo_acceso,
-            nombreNino: nombreNino,
-            items: []
+            nombre_nino: nombreGuardado
           };
-          localStorage.setItem('mmp_lista_activa', JSON.stringify(infoNueva));
+          localStorage.setItem(CLAVE_LISTA_ACTIVA, JSON.stringify(infoNueva));
+          refrescarPanelListaActiva();
+          aplicarFiltros();
 
           if (codigoGeneradoSpan) codigoGeneradoSpan.textContent = resultado.codigo_acceso;
-          
-          const enlaceReal = `${window.location.origin}${window.location.pathname}?lista=${resultado.id_lista}`;
+
+          const enlaceReal = `${window.location.origin}${window.location.pathname}?lista=${encodeURIComponent(resultado.id_lista)}`;
           if (inputEnlaceCompartir) inputEnlaceCompartir.value = enlaceReal;
 
-          modalRegistroCumple?.classList.remove('flex');
-          modalRegistroCumple?.classList.add('hidden');
+          cerrarModalRegistro();
           modalExitoLista?.classList.remove('hidden');
           modalExitoLista?.classList.add('flex');
+          actualizarScrollBloqueo();
         } else {
-          alert("Error: " + (resultado.message || "Inténtalo de nuevo."));
+          alert('Error: ' + (resultado.message || 'Inténtalo de nuevo.'));
         }
       } catch (error) {
         console.error(error);
-        alert("Error de conexión con el servidor.");
+        alert('Error de conexión con el servidor.');
       } finally {
-        if (btnSubmit) { btnSubmit.textContent = 'Crear Lista'; btnSubmit.disabled = false; }
+        if (btnSubmit) {
+          btnSubmit.textContent = 'Crear Lista';
+          btnSubmit.disabled = false;
+        }
       }
     });
 
-    btnCopiarEnlace?.addEventListener('click', () => {
-      if (inputEnlaceCompartir) {
-        inputEnlaceCompartir.select();
-        navigator.clipboard.writeText(inputEnlaceCompartir.value);
+    btnCopiarEnlace?.addEventListener('click', async () => {
+      if (!inputEnlaceCompartir || !inputEnlaceCompartir.value) return;
+      inputEnlaceCompartir.select();
+
+      try {
+        await navigator.clipboard.writeText(inputEnlaceCompartir.value);
         btnCopiarEnlace.textContent = '✔️ ¡Copiado!';
-        setTimeout(() => { btnCopiarEnlace.textContent = '📋 Copiar'; }, 2000);
+        setTimeout(() => {
+          btnCopiarEnlace.textContent = '📋 Copiar';
+        }, 2000);
+      } catch {
+        alert('Copia el enlace manualmente desde el campo de texto.');
       }
     });
 
     btnEmpezarAgregar?.addEventListener('click', () => {
-      modalExitoLista?.classList.remove('flex');
-      modalExitoLista?.classList.add('hidden');
-      window.location.reload();
+      cerrarModalExito();
+      window.location.href = window.location.pathname;
+    });
+
+    inputCodigoSeguimiento?.addEventListener('input', () => {
+      inputCodigoSeguimiento.value = inputCodigoSeguimiento.value.replace(/\D/g, '').slice(0, 6);
     });
 
     btnConsultarSeguimiento?.addEventListener('click', async () => {
-      const codigoAcceso = inputCodigoSeguimiento?.value.trim();
-      if (!codigoAcceso || codigoAcceso.length !== 6) {
-        alert("Ingresa un código secreto válido de 6 dígitos.");
+      const codigoAcceso = (inputCodigoSeguimiento?.value || '').trim();
+      if (!/^\d{6}$/.test(codigoAcceso)) {
+        alert('Ingresa un código secreto válido de 6 dígitos numéricos.');
         return;
       }
 
-      btnConsultarSeguimiento.textContent = "Verificando...";
+      btnConsultarSeguimiento.textContent = 'Verificando...';
       btnConsultarSeguimiento.disabled = true;
 
       try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          body: JSON.stringify({ accion: "consultar_lista", codigo_acceso: codigoAcceso })
-        });
-        const res = await response.json();
-        if (res.result === "success") {
-          localStorage.setItem('mmp_lista_activa', JSON.stringify(res.lista));
-          drawerMenuLista?.classList.add('translate-x-full');
-          alert(`¡Bienvenido de nuevo! Has cargado la lista de ${res.lista.nombreNino}. Ya puedes administrar tus regalos.`);
-          window.location.reload();
-        } else {
-          alert(res.message || "No se encontró ninguna lista con ese código.");
+        const cargado = await iniciarSesionConCodigo(codigoAcceso, true);
+        if (cargado) {
+          cerrarDrawer();
+          if (window.location.search) {
+            window.location.href = window.location.pathname;
+          }
         }
       } catch (e) {
         console.error(e);
-        alert("Error de conexión.");
+        alert('Error de conexión.');
       } finally {
-        btnConsultarSeguimiento.textContent = "Ingresar";
+        btnConsultarSeguimiento.textContent = 'Ingresar';
         btnConsultarSeguimiento.disabled = false;
       }
     });
