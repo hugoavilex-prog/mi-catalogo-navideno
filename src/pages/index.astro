@@ -1,9 +1,17 @@
 ---
+import { getImage } from 'astro:assets';
 import Layout from '../layouts/Layout.astro';
 
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS2ashxyFTq07uDvUqXXB7wYYtKFrVa_bsGbrvLg5sdRhbgEzzqo2z1kIZg8n_MTve4idf-fqRAfcz8/pub?output=csv";
 const numeroWhatsApp = "51982441399";
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzYGUupwWJX0lcIDN76ytUeBopqbrqDdPGj0xq_pL4PcAVc5v-ofWXNHoOHJmW6I24hFg/exec";
+
+interface ImagenOptimizada {
+  original: string;
+  card: string;
+  thumb: string;
+  modal: string;
+}
 
 interface Producto {
   id: string;
@@ -12,8 +20,8 @@ interface Producto {
   precio: number;
   precioAnterior?: number;
   descripcion: string;
-  imagen: string;
-  galeria: string[];
+  imagen: ImagenOptimizada;
+  galeria: ImagenOptimizada[];
   video?: string;
   medidas?: string;
   badge?: string;
@@ -86,6 +94,61 @@ function crearSlugEstable(texto: string, indice: number): string {
   return limpio ? `prod-${limpio}` : `prod-item-${indice}`;
 }
 
+function esDominioOptimizable(url: string): boolean {
+  try {
+    const parsed = new URL(url.trim());
+    return (
+      parsed.protocol === 'https:' &&
+      (parsed.hostname === 'i.ibb.co' ||
+        parsed.hostname.endsWith('.ibb.co') ||
+        parsed.hostname === 'images.unsplash.com')
+    );
+  } catch {
+    return false;
+  }
+}
+
+const cacheImagenes = new Map<string, Promise<ImagenOptimizada>>();
+
+function optimizarImagenRemota(url: string): Promise<ImagenOptimizada> {
+  const fallback: ImagenOptimizada = { original: url, card: url, thumb: url, modal: url };
+  if (!esDominioOptimizable(url)) return Promise.resolve(fallback);
+
+  const existente = cacheImagenes.get(url);
+  if (existente) return existente;
+
+  const promesa = (async (): Promise<ImagenOptimizada> => {
+    try {
+      const headRes = await fetch(url, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(5000)
+      });
+      const contentType = (headRes.headers.get('content-type') || '').toLowerCase();
+      if (headRes.status !== 405 && (!headRes.ok || !contentType.startsWith('image/'))) {
+        return fallback;
+      }
+
+      const [cardImg, thumbImg, modalImg] = await Promise.all([
+        getImage({ src: url, width: 560, height: 560, fit: 'contain', format: 'webp', quality: 80 }),
+        getImage({ src: url, width: 96, height: 96, fit: 'cover', format: 'webp', quality: 72 }),
+        getImage({ src: url, width: 1200, height: 1200, fit: 'contain', format: 'webp', quality: 84 })
+      ]);
+
+      return {
+        original: url,
+        card: cardImg.src,
+        thumb: thumbImg.src,
+        modal: modalImg.src
+      };
+    } catch {
+      return fallback;
+    }
+  })();
+
+  cacheImagenes.set(url, promesa);
+  return promesa;
+}
+
 let productos: Producto[] = [];
 let errorCargaCatalogo = false;
 
@@ -140,20 +203,20 @@ try {
         precio: precioValido,
         precioAnterior: precioAnteriorValido,
         descripcion: (filaObj.descripcion || 'Producto importado de alta calidad con garantía.').trim(),
-        imagen: imagenSegura,
-        galeria: todasFotosUnicas,
+        imagenUrl: imagenSegura,
+        galeriaUrls: todasFotosUnicas,
         video: esUrlSegura(filaObj.video) ? filaObj.video.trim() : undefined,
         medidas: (filaObj.medidas || '').trim() || undefined,
         badge: (filaObj.badge || '').trim() || undefined,
         tags: (filaObj.tags || '').trim(),
         top: (filaObj.top || '').trim(),
         estado: (filaObj.estado || '').trim()
-      } satisfies Producto;
+      };
     });
 
-    productos = rawProductos.filter(item => item.estado.toLowerCase() === 'activo');
+    const activos = rawProductos.filter(item => item.estado.toLowerCase() === 'activo');
 
-    productos.sort((a, b) => {
+    activos.sort((a, b) => {
       const catA = a.categoria.toLowerCase();
       const catB = b.categoria.toLowerCase();
       if (catA !== catB) return catA.localeCompare(catB);
@@ -172,6 +235,31 @@ try {
 
       return a.id.localeCompare(b.id);
     });
+
+    productos = await Promise.all(
+      activos.map(async (item): Promise<Producto> => {
+        const [imagenOpt, ...galeriaOpt] = await Promise.all([
+          optimizarImagenRemota(item.imagenUrl),
+          ...item.galeriaUrls.map((u: string) => optimizarImagenRemota(u))
+        ]);
+        return {
+          id: item.id,
+          nombre: item.nombre,
+          categoria: item.categoria,
+          precio: item.precio,
+          precioAnterior: item.precioAnterior,
+          descripcion: item.descripcion,
+          imagen: imagenOpt,
+          galeria: galeriaOpt,
+          video: item.video,
+          medidas: item.medidas,
+          badge: item.badge,
+          tags: item.tags,
+          top: item.top,
+          estado: item.estado
+        };
+      })
+    );
   }
 } catch (error) {
   console.error('Error al cargar Google Sheets:', error);
@@ -221,7 +309,7 @@ const badgesEspeciales = [
       <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-2 md:gap-4">
         <div class="flex items-center gap-2 shrink-0">
           <a href="/" class="flex items-center gap-2">
-            <img src="/logo.jpg" alt="MMP Tienda Online" class="h-12 md:h-14 w-auto object-contain rounded-md" />
+            <img src="/logo.jpg" alt="MMP Tienda Online" fetchpriority="high" decoding="async" class="h-12 md:h-14 w-auto object-contain rounded-md" />
           </a>
         </div>
 
@@ -368,16 +456,19 @@ const badgesEspeciales = [
                 data-nombre={item.nombre}
                 data-desc={item.descripcion}
                 data-precio={`S/ ${item.precio.toFixed(2)}`}
-                data-imagen={item.imagen}
+                data-imagen={item.imagen.modal}
+                data-imagen-original={item.imagen.original}
                 data-id={item.id}
               >
                 <div class="w-full h-full absolute inset-0 bg-gray-50 flex items-center justify-center p-2">
                   <img
-                    src={item.imagen}
+                    src={item.imagen.card}
                     alt={item.nombre}
                     class="imagen-principal object-contain w-full h-full pointer-events-none group-hover:scale-105 transition-transform duration-300"
                     id={`img-${uniqueId}`}
-                    loading="lazy"
+                    loading={index < 6 ? 'eager' : 'lazy'}
+                    fetchpriority={index < 3 ? 'high' : 'auto'}
+                    decoding="async"
                   />
                 </div>
 
@@ -403,17 +494,19 @@ const badgesEspeciales = [
 
                 {item.galeria.length > 1 && (
                   <div class="stop-prop relative z-10 mt-auto flex gap-1 bg-black/50 backdrop-blur-md p-1 rounded overflow-x-auto">
-                    {item.galeria.map((fotoUrl: string, fotoIdx: number) => (
+                    {item.galeria.map((foto: ImagenOptimizada, fotoIdx: number) => (
                       <button
                         type="button"
                         class={`minifoto-btn w-6 h-6 rounded overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
                           fotoIdx === 0 ? 'border-red-500 scale-105' : 'border-white/50 hover:border-white'
                         }`}
                         data-target={`img-${uniqueId}`}
-                        data-url={fotoUrl}
+                        data-url={foto.card}
+                        data-modal-url={foto.modal}
+                        data-original-url={foto.original}
                         aria-label={`Ver imagen ${fotoIdx + 1} de ${item.nombre}`}
                       >
-                        <img src={fotoUrl} alt="" class="w-full h-full object-cover" />
+                        <img src={foto.thumb} alt="" width="24" height="24" loading="lazy" decoding="async" class="w-full h-full object-cover" />
                       </button>
                     ))}
                   </div>
@@ -449,7 +542,8 @@ const badgesEspeciales = [
                   data-nombre={item.nombre}
                   data-desc={item.descripcion}
                   data-precio={`S/ ${item.precio.toFixed(2)}`}
-                  data-imagen={item.imagen}
+                  data-imagen={item.imagen.modal}
+                  data-imagen-original={item.imagen.original}
                   data-id={item.id}
                 >
                   🔍 Detalle
@@ -1012,7 +1106,8 @@ const badgesEspeciales = [
         btn.classList.add('border-red-500', 'scale-105');
 
         card?.querySelectorAll<HTMLElement>('.btn-detalle').forEach(det => {
-          det.dataset.imagen = nuevaUrl;
+          det.dataset.imagen = btn.dataset.modalUrl || nuevaUrl;
+          det.dataset.imagenOriginal = btn.dataset.originalUrl || nuevaUrl;
         });
       });
     });
@@ -1156,13 +1251,14 @@ const badgesEspeciales = [
 
         const card = btn.closest<HTMLElement>('.producto-card');
         const imgCard = card?.querySelector<HTMLImageElement>('.imagen-principal');
-        const imagenUrl = (imgCard && imgCard.src) || btn.dataset.imagen || '/logo.jpg';
+        const imagenModalUrl = btn.dataset.imagen || (imgCard && imgCard.src) || '/logo.jpg';
+        const imagenOriginalUrl = btn.dataset.imagenOriginal || imagenModalUrl;
 
         if (modalTitulo) modalTitulo.textContent = nombre;
         if (modalDesc) modalDesc.textContent = desc;
         if (modalPrecio) modalPrecio.textContent = precioTexto;
         if (modalImg) {
-          modalImg.src = imagenUrl;
+          modalImg.src = imagenModalUrl;
           modalImg.alt = nombre;
         }
 
@@ -1171,7 +1267,7 @@ const badgesEspeciales = [
           id: productId,
           nombre,
           precio: Number.isFinite(precioLimpio) ? precioLimpio : 0,
-          imagen: imagenUrl
+          imagen: imagenOriginalUrl
         };
 
         configurarBotonModalDetalle();
