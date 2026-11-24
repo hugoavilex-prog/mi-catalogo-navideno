@@ -126,11 +126,17 @@ try {
       const todasFotosUnicas = Array.from(new Set([imagenSegura, ...galeriaSegura]));
       const nombreLimpiado = (filaObj.nombre || 'Producto sin nombre').trim();
       const idEstable = (filaObj.id || filaObj.codigo || '').trim() || crearSlugEstable(nombreLimpiado, index);
+      const categoriaRaw = (filaObj.categoria || 'General').trim();
+      const categoriaSinTilde = categoriaRaw
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      const categoriaFinal = categoriaSinTilde === 'muneca' ? 'Regalos' : categoriaRaw;
 
       return {
         id: idEstable,
         nombre: nombreLimpiado,
-        categoria: (filaObj.categoria || 'General').trim(),
+        categoria: categoriaFinal,
         precio: precioValido,
         precioAnterior: precioAnteriorValido,
         descripcion: (filaObj.descripcion || 'Producto importado de alta calidad con garantía.').trim(),
