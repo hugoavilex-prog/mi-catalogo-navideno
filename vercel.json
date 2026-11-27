@@ -1,0 +1,14 @@
+{
+  "redirects": [
+    {
+      "source": "/gestion",
+      "destination": "https://mmp-gestion.vercel.app/login",
+      "permanent": false
+    },
+    {
+      "source": "/gestion/",
+      "destination": "https://mmp-gestion.vercel.app/login",
+      "permanent": false
+    }
+  ]
+}
